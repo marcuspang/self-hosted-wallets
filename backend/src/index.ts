@@ -26,6 +26,7 @@ import {
   getKMSCredentialManager
 } from './services/kmsCredentialManager.js'
 import 'dotenv/config'
+import { cors } from 'hono/cors'
 
 export interface Bindings extends HttpBindings {
   JWT_SECRET: string
@@ -452,6 +453,22 @@ async function getEC2InstancePrivateIP(
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+app.use(
+  cors({
+    origin: (origin, c) => {
+      const allowedOrigins = [
+        'https://stg.id.porto.sh',
+        'https://id.porto.sh',
+        env(c).FRONTEND_URL
+      ].filter(Boolean)
+      if (allowedOrigins.includes(origin)) {
+        return origin
+      }
+      return ''
+    }
+  })
+)
 
 app.route('/api', createAPIRoutes())
 

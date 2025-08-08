@@ -13,11 +13,11 @@ import { env } from 'hono/adapter'
 import { deleteCookie, setCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import * as jwt from 'hono/jwt'
+import { Redis } from 'ioredis'
 import { NodeSSH } from 'node-ssh'
 import { Client } from 'pg'
 import { Porto, ServerActions } from 'porto'
 import { ServerClient } from 'porto/viem'
-import { createClient } from 'redis'
 import { hashMessage } from 'viem'
 import { generateSiweNonce, parseSiweMessage } from 'viem/siwe'
 import { enclaveClient } from './enclaveClient.js'
@@ -649,8 +649,8 @@ function createAPIRoutes() {
 
     // Store nonce for this session (10 minutes).
     const { KV_URL } = env(c)
-    const client = createClient({ url: KV_URL })
-    await client.set(nonce, 'valid', { EX: 600 })
+    const client = new Redis(`${KV_URL}?family=0`)
+    await client.set(nonce, 'valid', 'EX', 600)
 
     return c.json({ nonce })
   })
@@ -667,7 +667,7 @@ function createAPIRoutes() {
 
     // Check if the nonce is valid for this session.
     const { KV_URL } = env(c)
-    const redisClient = createClient({ url: KV_URL })
+    const redisClient = new Redis(`${KV_URL}?family=0`)
     const nonce_session = await redisClient.get(nonce)
     if (!nonce_session) {
       return c.json({ error: 'Invalid or expired nonce' }, 401)

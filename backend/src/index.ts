@@ -32,6 +32,7 @@ export interface Bindings extends HttpBindings {
   JWT_SECRET: string
   KV_URL: string
   KMS_KEY_ID?: string
+  FRONTEND_URL: string
 }
 
 // Helper functions for Nitro Enclave deployment
@@ -454,10 +455,9 @@ async function getEC2InstancePrivateIP(
 const app = new Hono<{ Bindings: Bindings }>()
 
 // Add CORS middleware for frontend communication
-app.use(
-  '/api/*',
+app.use('/api/*', (c) =>
   cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000'], // Add your frontend URLs
+    origin: ['http://localhost:5173', env(c).FRONTEND_URL],
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization']

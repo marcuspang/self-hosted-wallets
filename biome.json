@@ -1,0 +1,91 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.1.3/schema.json",
+  "extends": ["ultracite"],
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "performance": {
+        "noNamespaceImport": "warn"
+      },
+      "style": {
+        "useDefaultSwitchClause": "off",
+        "noNonNullAssertion": "warn",
+        "noNestedTernary": "warn",
+        "useBlockStatements": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "useAtIndex": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "useTemplate": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "noUselessElse": "error"
+      },
+      "suspicious": {
+        "noConsole": "off"
+      },
+      "recommended": true,
+      "correctness": {
+        "noUnusedImports": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "noUnusedVariables": "warn",
+        "useExhaustiveDependencies": "warn"
+      },
+      "complexity": {
+        "useOptionalChain": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn"
+        }
+      },
+      "nursery": {
+        "useSortedClasses": {
+          "level": "error",
+          "fix": "safe",
+          "options": {
+            "attributes": ["className"],
+            "functions": ["cn"]
+          }
+        }
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": false
+    },
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "none",
+      "semicolons": "asNeeded",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false,
+      "jsxQuoteStyle": "double"
+    }
+  }
+}

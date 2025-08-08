@@ -34,6 +34,16 @@ interface ValidationResponse {
   hasEC2Key: boolean
 }
 
+interface SecurityGroupStatus {
+  success: boolean
+  securityGroupId: string
+  groupName: string
+  description: string
+  hasSSHAccess: boolean
+  vpcId: string
+  status: 'configured' | 'needs_ssh_rule'
+}
+
 interface OperationStats {
   totalInstances: number
   runningInstances: number
@@ -93,6 +103,37 @@ export function AWSOperationCenter() {
       enabled: hasCredentials,
       retry: false,
       refetchInterval: 5 * 60 * 1000 // Revalidate every 5 minutes
+    })
+
+  // Check security group status if credentials are valid
+  const { data: securityGroupStatus, isLoading: isCheckingSecurityGroup } =
+    useQuery<SecurityGroupStatus>({
+      queryKey: ['aws-security-groups-status'],
+      queryFn: async () => {
+        const credentialsForRequest =
+          CredentialManager.getCredentialsForRequest()
+        if (!credentialsForRequest) {
+          throw new Error('No credentials available')
+        }
+
+        const response = await fetch(
+          getApiUrl('/api/aws/security-groups/status'),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(credentialsForRequest)
+          }
+        )
+
+        if (!response.ok) {
+          throw new Error('Failed to check security group status')
+        }
+        return response.json()
+      },
+      enabled: hasCredentials && validationResult?.valid,
+      retry: false,
+      refetchInterval: 5 * 60 * 1000 // Check every 5 minutes
     })
 
   // Fetch instances if credentials are valid
@@ -244,6 +285,31 @@ export function AWSOperationCenter() {
             <Shield className="h-4 w-4 text-green-600" />
             <span>Region: {validationResult?.region}</span>
           </div>
+          {isCheckingSecurityGroup ? (
+            <div className="flex items-center space-x-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+              <span>Checking SSH access...</span>
+            </div>
+          ) : securityGroupStatus?.success ? (
+            <div className="flex items-center space-x-2 text-muted-foreground text-sm">
+              {securityGroupStatus.hasSSHAccess ? (
+                <>
+                  <Shield className="h-4 w-4 text-green-600" />
+                  <span>SSH: Ready</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-4 w-4 text-orange-500" />
+                  <span>SSH: Configuring...</span>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 text-muted-foreground text-sm">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <span>SSH: Error</span>
+            </div>
+          )}
           <Button
             disabled={validateConnectionMutation.isPending}
             onClick={handleValidateConnection}
@@ -385,6 +451,32 @@ export function AWSOperationCenter() {
                         <span className="text-sm text-yellow-600">
                           Not configured
                         </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">SSH Access</span>
+                  <div className="flex items-center space-x-1">
+                    {isCheckingSecurityGroup ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+                        <span className="text-orange-500 text-sm">Checking...</span>
+                      </>
+                    ) : securityGroupStatus?.success && securityGroupStatus.hasSSHAccess ? (
+                      <>
+                        <Shield className="h-4 w-4 text-green-600" />
+                        <span className="text-green-600 text-sm">Ready</span>
+                      </>
+                    ) : securityGroupStatus?.success ? (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-orange-500" />
+                        <span className="text-orange-500 text-sm">Configuring...</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        <span className="text-red-500 text-sm">Error</span>
                       </>
                     )}
                   </div>

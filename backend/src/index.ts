@@ -1,5 +1,9 @@
 import {
+  AuthorizeSecurityGroupIngressCommand,
+  CreateSecurityGroupCommand,
   DescribeInstancesCommand,
+  DescribeSecurityGroupsCommand,
+  DescribeVpcsCommand,
   EC2Client,
   RunInstancesCommand,
   type RunInstancesCommandInput,
@@ -100,22 +104,31 @@ async function executeSSHCommands(
   try {
     console.log(`📡 Connecting to EC2 instance ${instanceIP} via SSH...`)
 
-    // Connect to the EC2 instance
+    // Validate private key exists
+    if (!credentials.ec2PrivateKey) {
+      throw new Error('No private key provided in credentials')
+    }
+
+    // Connect to the EC2 instance with extended timeout and better debugging
     await ssh.connect({
       host: instanceIP,
       username: 'ec2-user',
-      privateKey: credentials.ec2PrivateKey, // PEM format private key content
+      privateKey: credentials.ec2PrivateKey.trim(), // Ensure no whitespace issues
       port: 22,
-      readyTimeout: 60_000,
+      readyTimeout: 120_000, // Increased to 2 minutes
       algorithms: {
         kex: [
           'diffie-hellman-group-exchange-sha256',
-          'diffie-hellman-group14-sha256'
+          'diffie-hellman-group14-sha256',
+          'ecdh-sha2-nistp256',
+          'ecdh-sha2-nistp384',
+          'ecdh-sha2-nistp521'
         ],
         cipher: ['aes128-ctr', 'aes192-ctr', 'aes256-ctr'],
         hmac: ['hmac-sha2-256', 'hmac-sha2-512'],
         compress: ['none']
       }
+      // debug: (message) => console.log(`🔍 SSH Debug: ${message}`)
     })
 
     console.log(`✅ SSH connection established to ${instanceIP}`)
@@ -182,6 +195,65 @@ async function executeSSHCommands(
   }
 }
 
+// Test SSH connection with simple command
+async function testSSHConnection(
+  instanceId: string,
+  credentials: AWSCredentials
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const instanceIP = await getEC2InstancePublicIP(instanceId, credentials)
+    if (!instanceIP) {
+      return { success: false, error: 'Could not get instance IP' }
+    }
+
+    const ssh = new NodeSSH()
+
+    try {
+      console.log(`🔍 Testing SSH connection to ${instanceIP}...`)
+
+      await ssh.connect({
+        host: instanceIP,
+        username: 'ec2-user',
+        privateKey: credentials.ec2PrivateKey?.trim(),
+        port: 22,
+        readyTimeout: 30_000, // Shorter timeout for test
+        algorithms: {
+          kex: [
+            'diffie-hellman-group-exchange-sha256',
+            'diffie-hellman-group14-sha256',
+            'ecdh-sha2-nistp256'
+          ],
+          cipher: ['aes128-ctr', 'aes192-ctr', 'aes256-ctr'],
+          hmac: ['hmac-sha2-256', 'hmac-sha2-512'],
+          compress: ['none']
+        }
+      })
+
+      // Simple test command
+      const result = await ssh.execCommand(
+        'echo "SSH connection test successful"'
+      )
+      ssh.dispose()
+
+      if (result.code === 0) {
+        console.log('✅ SSH test successful')
+        return { success: true }
+      }
+      console.log('❌ SSH test command failed')
+      return {
+        success: false,
+        error: `Command failed with exit code ${result.code}`
+      }
+    } catch (error: any) {
+      ssh.dispose()
+      console.log(`❌ SSH test connection failed: ${error.message}`)
+      return { success: false, error: error.message }
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
 async function waitForInstanceReady(
   instanceId: string,
   credentials: AWSCredentials
@@ -208,8 +280,21 @@ async function waitForInstanceReady(
 
       if (instance?.State?.Name === 'running') {
         console.log('✅ Instance is running')
-        // Additional wait for user data script to complete
-        await new Promise((resolve) => setTimeout(resolve, 30_000)) // 30 seconds
+        // Additional wait for user data script to complete and SSH service to be ready
+        console.log('⏳ Waiting additional time for SSH service to be ready...')
+        await new Promise((resolve) => setTimeout(resolve, 60_000)) // 60 seconds
+
+        // Try to test SSH connection
+        console.log('🔍 Testing SSH connectivity...')
+        try {
+          const sshTest = await testSSHConnection(instanceId, credentials)
+          if (!sshTest.success) {
+            console.log('⚠️ SSH test failed, waiting additional 30 seconds...')
+            await new Promise((resolve) => setTimeout(resolve, 30_000))
+          }
+        } catch (error) {
+          console.log('⚠️ SSH test encountered error, proceeding anyway...')
+        }
         return
       }
 
@@ -491,6 +576,86 @@ function createAPIRoutes() {
   // Helper function to get AWS EC2 client with decrypted credentials
   const getEC2Client = (credentials: AWSCredentials): EC2Client => {
     return CredentialManager.createEC2Client(credentials)
+  }
+
+  // Helper function to ensure SSH-enabled security group exists
+  const ensureSSHSecurityGroup = async (
+    credentials: AWSCredentials
+  ): Promise<string> => {
+    const ec2Client = getEC2Client(credentials)
+    const securityGroupName = 'nitro-enclave-ssh-access'
+
+    try {
+      // Check if security group already exists
+      const describeCommand = new DescribeSecurityGroupsCommand({
+        Filters: [
+          { Name: 'group-name', Values: [securityGroupName] },
+          {
+            Name: 'description',
+            Values: ['Security group for Nitro Enclave SSH access']
+          }
+        ]
+      })
+
+      const existingGroups = await ec2Client.send(describeCommand)
+      if (
+        existingGroups.SecurityGroups &&
+        existingGroups.SecurityGroups.length > 0
+      ) {
+        const existingGroupId = existingGroups.SecurityGroups[0].GroupId!
+        console.log(`✅ Using existing SSH security group: ${existingGroupId}`)
+        return existingGroupId
+      }
+    } catch (error) {
+      // Group doesn't exist, continue to create it
+    }
+
+    try {
+      // Get default VPC for the region
+      const vpcCommand = new DescribeVpcsCommand({
+        Filters: [{ Name: 'isDefault', Values: ['true'] }]
+      })
+      const vpcResponse = await ec2Client.send(vpcCommand)
+      const defaultVpcId = vpcResponse.Vpcs?.[0]?.VpcId
+
+      if (!defaultVpcId) {
+        throw new Error('No default VPC found. Please specify a VPC ID.')
+      }
+
+      // Create security group
+      const createCommand = new CreateSecurityGroupCommand({
+        GroupName: securityGroupName,
+        Description: 'Security group for Nitro Enclave SSH access',
+        VpcId: defaultVpcId
+      })
+
+      const createResponse = await ec2Client.send(createCommand)
+      const securityGroupId = createResponse.GroupId!
+
+      // Add SSH inbound rule (port 22)
+      const authorizeCommand = new AuthorizeSecurityGroupIngressCommand({
+        GroupId: securityGroupId,
+        IpPermissions: [
+          {
+            IpProtocol: 'tcp',
+            FromPort: 22,
+            ToPort: 22,
+            IpRanges: [
+              { CidrIp: '0.0.0.0/0', Description: 'SSH access from anywhere' }
+            ]
+          }
+        ]
+      })
+
+      await ec2Client.send(authorizeCommand)
+      console.log(`✅ Created SSH security group: ${securityGroupId}`)
+      return securityGroupId
+    } catch (error) {
+      console.error('Failed to create SSH security group:', error)
+      throw new Error(
+        'Failed to create security group with SSH access. Please ensure your AWS credentials have appropriate permissions.'
+      )
+    }
   }
 
   // Helper function to extract credentials from request
@@ -949,6 +1114,69 @@ function createAPIRoutes() {
     }
   })
 
+  api.post('/aws/security-groups/status', authMiddleware, async (c) => {
+    try {
+      const { encryptedCredentials, encryptionKey } = await c.req.json()
+
+      if (!(encryptedCredentials && encryptionKey)) {
+        return c.json(
+          { error: 'Encrypted credentials and encryption key are required' },
+          400
+        )
+      }
+
+      const credentials = CredentialManager.decryptCredentials(
+        encryptedCredentials,
+        encryptionKey
+      )
+
+      try {
+        // Check if SSH security group exists and get its status
+        const sshSecurityGroupId = await ensureSSHSecurityGroup(credentials)
+
+        // Verify the security group has proper SSH rules
+        const ec2 = getEC2Client(credentials)
+        const describeCommand = new DescribeSecurityGroupsCommand({
+          GroupIds: [sshSecurityGroupId]
+        })
+        const response = await ec2.send(describeCommand)
+        const securityGroup = response.SecurityGroups?.[0]
+
+        const hasSSHRule = securityGroup?.IpPermissions?.some(
+          (rule) =>
+            rule.IpProtocol === 'tcp' &&
+            rule.FromPort === 22 &&
+            rule.ToPort === 22 &&
+            rule.IpRanges?.some((range) => range.CidrIp === '0.0.0.0/0')
+        )
+
+        return c.json({
+          success: true,
+          securityGroupId: sshSecurityGroupId,
+          groupName: securityGroup?.GroupName,
+          description: securityGroup?.Description,
+          hasSSHAccess: hasSSHRule,
+          vpcId: securityGroup?.VpcId,
+          status: hasSSHRule ? 'configured' : 'needs_ssh_rule'
+        })
+      } catch (error) {
+        return c.json(
+          {
+            success: false,
+            error: 'Failed to check or create SSH security group',
+            details: error instanceof Error ? error.message : 'Unknown error'
+          },
+          500
+        )
+      }
+    } catch (error: any) {
+      return c.json(
+        { error: error.message || 'Failed to check security group status' },
+        500
+      )
+    }
+  })
+
   // AWS Instance Management Routes
   api.post('/aws/instances/list', authMiddleware, async (c) => {
     try {
@@ -1031,6 +1259,15 @@ function createAPIRoutes() {
         AMAZON_LINUX_2_AMI_BY_REGION[selectedRegion] ||
         AMAZON_LINUX_2_AMI_BY_REGION['us-east-1']
 
+      // Ensure we have a security group with SSH access
+      const sshSecurityGroupId =
+        securityGroupId ||
+        credentials.securityGroupId ||
+        (await ensureSSHSecurityGroup(credentials))
+      console.log(
+        `🔐 Using security group for SSH access: ${sshSecurityGroupId}`
+      )
+
       // UserData script to install Nitro CLI and set up enclave environment
       const userData = `#!/bin/bash
 set -e
@@ -1087,11 +1324,7 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
         ...(keyName ? { KeyName: keyName } : {}),
         // Networking configuration
         ...(subnetId ? { SubnetId: subnetId } : {}),
-        ...(securityGroupId || credentials.securityGroupId
-          ? {
-              SecurityGroupIds: [securityGroupId || credentials.securityGroupId]
-            }
-          : {}),
+        SecurityGroupIds: [sshSecurityGroupId],
         UserData: Buffer.from(userData).toString('base64'),
         TagSpecifications: [
           {
@@ -1164,6 +1397,122 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
       return c.json({ error: error.message || 'Failed to stop instance' }, 500)
     }
   })
+
+  api.post('/aws/instances/:id/test-ssh', authMiddleware, async (c) => {
+    try {
+      const instanceId = c.req.param('id')
+      const credentials = await getCredentialsFromRequest(c)
+
+      if (!credentials.ec2PrivateKey) {
+        return c.json(
+          {
+            success: false,
+            error: 'No SSH private key configured'
+          },
+          400
+        )
+      }
+
+      console.log(`🔍 Testing SSH connection to instance ${instanceId}`)
+      const result = await testSSHConnection(instanceId, credentials)
+
+      return c.json({
+        success: result.success,
+        error: result.error,
+        message: result.success
+          ? 'SSH connection test successful'
+          : `SSH connection test failed: ${result.error}`
+      })
+    } catch (error: any) {
+      return c.json(
+        {
+          success: false,
+          error: error.message || 'Failed to test SSH connection'
+        },
+        500
+      )
+    }
+  })
+
+  api.post(
+    '/aws/instances/:id/verify-enclave-setup',
+    authMiddleware,
+    async (c) => {
+      try {
+        const instanceId = c.req.param('id')
+        const credentials = await getCredentialsFromRequest(c)
+
+        if (!credentials.ec2PrivateKey) {
+          return c.json(
+            {
+              success: false,
+              error: 'No SSH private key configured'
+            },
+            400
+          )
+        }
+
+        console.log(
+          `🔍 Verifying Nitro Enclave setup on instance ${instanceId}`
+        )
+
+        const instanceIP = await getEC2InstancePublicIP(instanceId, credentials)
+        if (!instanceIP) {
+          return c.json(
+            {
+              success: false,
+              error: 'Could not get instance IP address'
+            },
+            500
+          )
+        }
+
+        // Commands to verify enclave setup
+        const verificationCommands = [
+          'echo "=== System Info ==="',
+          'uname -a',
+          'echo "=== Nitro CLI Installation ==="',
+          'which nitro-cli || echo "nitro-cli not found in PATH"',
+          'nitro-cli --version || echo "Failed to get nitro-cli version"',
+          'echo "=== Nitro Enclaves Service Status ==="',
+          'systemctl status nitro-enclaves-allocator.service || echo "Service not running"',
+          'echo "=== Enclave Configuration ==="',
+          'cat /etc/nitro_enclaves/allocator.yaml || echo "Config file not found"',
+          'echo "=== Docker Status ==="',
+          'systemctl status docker || echo "Docker not running"',
+          'docker --version || echo "Docker not installed"',
+          'echo "=== Available Resources ==="',
+          'lscpu | grep -E "CPU|Thread|Core" || echo "CPU info not available"',
+          'free -h || echo "Memory info not available"',
+          'echo "=== Current Enclaves ==="',
+          'nitro-cli describe-enclaves || echo "No enclaves running or CLI not available"'
+        ]
+
+        const result = await executeSSHCommands(
+          instanceIP,
+          verificationCommands,
+          credentials
+        )
+
+        return c.json({
+          success: result.success,
+          output: result.output,
+          error: result.error,
+          message: result.success
+            ? 'Enclave setup verification completed'
+            : 'Enclave setup verification failed'
+        })
+      } catch (error: any) {
+        return c.json(
+          {
+            success: false,
+            error: error.message || 'Failed to verify enclave setup'
+          },
+          500
+        )
+      }
+    }
+  )
 
   api.delete('/aws/instances/:id', authMiddleware, async (c) => {
     try {

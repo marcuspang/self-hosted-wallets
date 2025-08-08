@@ -186,50 +186,6 @@ export function SecureAWSIntegration() {
 
       {/* Main Operations Center */}
       <AWSOperationCenter />
-
-      {/* Architecture Benefits */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Architecture Benefits</CardTitle>
-          <CardDescription>
-            Why this secure credential management approach is superior
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Shield className="h-4 w-4 text-green-600" />
-                <h4 className="font-medium text-sm">Security First</h4>
-              </div>
-              <p className="text-muted-foreground text-xs">
-                Credentials encrypted with AWS KMS, never stored in plaintext,
-                with automatic key rotation support.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Cloud className="h-4 w-4 text-blue-600" />
-                <h4 className="font-medium text-sm">Cloud Native</h4>
-              </div>
-              <p className="text-muted-foreground text-xs">
-                Built for cloud environments with local caching for performance
-                and offline capability.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Key className="h-4 w-4 text-purple-600" />
-                <h4 className="font-medium text-sm">Zero Trust</h4>
-              </div>
-              <p className="text-muted-foreground text-xs">
-                No environment variables or config files with sensitive data.
-                All credentials encrypted at rest.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

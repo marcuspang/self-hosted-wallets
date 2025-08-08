@@ -7,6 +7,7 @@ import {
   Loader2,
   Play,
   Plus,
+  Search,
   Server,
   Shield,
   Square,
@@ -45,6 +46,10 @@ export function AWSInstanceManagement() {
   const queryClient = useQueryClient()
   const [selectedInstanceType, setSelectedInstanceType] = useState('m5.xlarge')
   const [selectedRegion, setSelectedRegion] = useState('us-east-1')
+  const [verificationResult, setVerificationResult] = useState<{
+    instanceId: string
+    result: any
+  } | null>(null)
 
   const instanceTypes = [
     { value: 'm5.xlarge', label: 'M5 Extra Large (4 vCPU, 16GB RAM)' },
@@ -60,6 +65,30 @@ export function AWSInstanceManagement() {
 
   // Check if credentials are available
   const hasCredentials = CredentialManager.hasValidCredentials()
+
+  const verifyEnclaveSetupMutation = useMutation({
+    mutationFn: async (instanceId: string) => {
+      const requestBody = CredentialManager.createRequestWithCredentials()
+
+      const response = await fetch(
+        getApiUrl(`/api/aws/instances/${instanceId}/verify-enclave-setup`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(requestBody)
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to verify enclave setup')
+      }
+      return { instanceId, result: await response.json() }
+    },
+    onSuccess: (data) => {
+      setVerificationResult(data)
+    }
+  })
 
   const { data: instances = [], error: instancesError } = useQuery<Instance[]>({
     queryKey: ['aws-instances'],
@@ -206,6 +235,13 @@ export function AWSInstanceManagement() {
       return
     }
     deployEnclaveMutation.mutate(instanceId)
+  }
+
+  const verifyEnclaveSetup = (instanceId: string) => {
+    if (!hasCredentials) {
+      return
+    }
+    verifyEnclaveSetupMutation.mutate(instanceId)
   }
 
   const getStatusColor = (status: string) => {
@@ -384,6 +420,39 @@ export function AWSInstanceManagement() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Verification Result Display */}
+          {verificationResult && (
+            <div className="mb-4">
+              <Alert className={verificationResult.result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+                <Search className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="space-y-2">
+                    <p className="font-medium">
+                      Enclave Setup Verification for {verificationResult.instanceId}
+                    </p>
+                    <p className={verificationResult.result.success ? 'text-green-700' : 'text-red-700'}>
+                      {verificationResult.result.message}
+                    </p>
+                    {verificationResult.result.output && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer font-medium text-sm">View Detailed Report</summary>
+                        <pre className="mt-2 max-h-64 overflow-y-auto bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap">
+                          {verificationResult.result.output}
+                        </pre>
+                      </details>
+                    )}
+                    <Button
+                      onClick={() => setVerificationResult(null)}
+                      size="sm"
+                      variant="outline"
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
           {instances.length === 0 ? (
             <Alert>
               <AlertCircle className="h-4 w-4" />
@@ -429,6 +498,19 @@ export function AWSInstanceManagement() {
                             </Button>
                           ) : null}
                           <Button
+                            onClick={() => verifyEnclaveSetup(instance.id)}
+                            size="sm"
+                            variant="secondary"
+                            disabled={verifyEnclaveSetupMutation.isPending}
+                          >
+                            {verifyEnclaveSetupMutation.isPending ? (
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Search className="mr-2 h-3 w-3" />
+                            )}
+                            Verify Setup
+                          </Button>
+                          <Button
                             onClick={() => controlInstance(instance.id, 'stop')}
                             size="sm"
                             variant="outline"
@@ -439,14 +521,29 @@ export function AWSInstanceManagement() {
                         </>
                       )}
                       {instance.status === 'stopped' && (
-                        <Button
-                          onClick={() => controlInstance(instance.id, 'start')}
-                          size="sm"
-                          variant="outline"
-                        >
-                          <Play className="mr-2 h-3 w-3" />
-                          Start
-                        </Button>
+                        <>
+                          <Button
+                            onClick={() => controlInstance(instance.id, 'start')}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <Play className="mr-2 h-3 w-3" />
+                            Start
+                          </Button>
+                          <Button
+                            onClick={() => verifyEnclaveSetup(instance.id)}
+                            size="sm"
+                            variant="secondary"
+                            disabled={verifyEnclaveSetupMutation.isPending}
+                          >
+                            {verifyEnclaveSetupMutation.isPending ? (
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Search className="mr-2 h-3 w-3" />
+                            )}
+                            Verify Setup
+                          </Button>
+                        </>
                       )}
                       {instance.status === 'running' && (
                         <Button

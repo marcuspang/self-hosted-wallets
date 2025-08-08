@@ -11,7 +11,6 @@ import { type HttpBindings, serve } from '@hono/node-server'
 import { type Context, Hono } from 'hono'
 import { env } from 'hono/adapter'
 import { deleteCookie, setCookie } from 'hono/cookie'
-import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
 import * as jwt from 'hono/jwt'
 import { NodeSSH } from 'node-ssh'
@@ -453,16 +452,6 @@ async function getEC2InstancePrivateIP(
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
-
-// Add CORS middleware for frontend communication
-app.use('/api/*', (c) =>
-  cors({
-    origin: ['http://localhost:5173', env(c).FRONTEND_URL],
-    credentials: true,
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization']
-  })
-)
 
 app.route('/api', createAPIRoutes())
 

@@ -21,11 +21,11 @@ import { ServerClient } from 'porto/viem'
 import { createClient } from 'redis'
 import { hashMessage } from 'viem'
 import { generateSiweNonce, parseSiweMessage } from 'viem/siwe'
-import { enclaveClient } from './enclaveClient'
+import { enclaveClient } from './enclaveClient.js'
 import {
   type AWSCredentials,
   getKMSCredentialManager
-} from './services/kmsCredentialManager'
+} from './services/kmsCredentialManager.js'
 import 'dotenv/config'
 
 export interface Bindings extends HttpBindings {

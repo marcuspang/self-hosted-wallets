@@ -6,12 +6,10 @@
       "WebWorker"
     ],
     "module": "ESNext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
-    "noEmit": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "strict": true,
     "noUnusedLocals": false,

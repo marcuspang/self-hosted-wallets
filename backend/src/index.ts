@@ -597,7 +597,7 @@ function createAPIRoutes() {
         existingGroups.SecurityGroups &&
         existingGroups.SecurityGroups.length > 0
       ) {
-        const existingGroupId = existingGroups.SecurityGroups[0].GroupId!
+        const existingGroupId = existingGroups.SecurityGroups[0]!.GroupId!
         console.log(`✅ Using existing SSH security group: ${existingGroupId}`)
         return existingGroupId
       }

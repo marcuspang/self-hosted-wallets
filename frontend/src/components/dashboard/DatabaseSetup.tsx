@@ -13,6 +13,7 @@ import {
 } from '../ui/card'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
+import { getApiUrl } from '../../lib/api'
 
 export function DatabaseSetup() {
   const [databaseUrl, setDatabaseUrl] = useState('')
@@ -22,7 +23,7 @@ export function DatabaseSetup() {
 
   const testConnectionMutation = useMutation({
     mutationFn: async (databaseUrl: string) => {
-      const response = await fetch('/api/database/test-connection', {
+      const response = await fetch(getApiUrl('/api/database/test-connection'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -48,7 +49,7 @@ export function DatabaseSetup() {
 
   const setupSchemaMutation = useMutation({
     mutationFn: async (databaseUrl: string) => {
-      const response = await fetch('/api/database/setup-schema', {
+      const response = await fetch(getApiUrl('/api/database/setup-schema'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

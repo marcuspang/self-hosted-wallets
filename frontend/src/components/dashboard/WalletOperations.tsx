@@ -24,6 +24,7 @@ import {
 } from '../ui/card'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
+import { getApiUrl } from '../../lib/api'
 
 interface WalletInfo {
   address: string
@@ -45,7 +46,7 @@ export function WalletOperations() {
   const { data: wallets = [] } = useQuery({
     queryKey: ['wallets'],
     queryFn: async () => {
-      const response = await fetch('/api/wallet/list', {
+      const response = await fetch(getApiUrl('/api/wallet/list'), {
         credentials: 'include'
       })
       if (!response.ok) {
@@ -64,7 +65,7 @@ export function WalletOperations() {
       walletName: string
       instanceId: string
     }) => {
-      const response = await fetch('/api/wallet/generate-keys', {
+      const response = await fetch(getApiUrl('/api/wallet/generate-keys'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -97,7 +98,7 @@ export function WalletOperations() {
       value: string
       userShare?: string
     }) => {
-      const response = await fetch('/api/wallet/send-transaction', {
+      const response = await fetch(getApiUrl('/api/wallet/send-transaction'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -118,7 +119,7 @@ export function WalletOperations() {
 
   const refreshBalanceMutation = useMutation({
     mutationFn: async (walletAddress: string) => {
-      const response = await fetch(`/api/wallet/${walletAddress}/balance`, {
+      const response = await fetch(getApiUrl(`/api/wallet/${walletAddress}/balance`), {
         credentials: 'include'
       })
       if (!response.ok) {

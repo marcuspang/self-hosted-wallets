@@ -30,6 +30,7 @@ import {
   SelectValue
 } from '../ui/select'
 import { Switch } from '../ui/switch'
+import { getApiUrl } from '../../lib/api'
 
 interface Policy {
   id: string
@@ -60,7 +61,7 @@ export function PolicyConfiguration() {
   const { data: policies = [] } = useQuery({
     queryKey: ['policies'],
     queryFn: async () => {
-      const response = await fetch('/api/policies/list', {
+      const response = await fetch(getApiUrl('/api/policies/list'), {
         credentials: 'include'
       })
       if (!response.ok) {
@@ -73,7 +74,7 @@ export function PolicyConfiguration() {
 
   const createPolicyMutation = useMutation({
     mutationFn: async (policyData: any) => {
-      const response = await fetch('/api/policies/create', {
+      const response = await fetch(getApiUrl('/api/policies/create'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -100,7 +101,7 @@ export function PolicyConfiguration() {
       policyId: string
       isActive: boolean
     }) => {
-      const response = await fetch('/api/policies/update', {
+      const response = await fetch(getApiUrl('/api/policies/update'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -119,7 +120,7 @@ export function PolicyConfiguration() {
 
   const deletePolicyMutation = useMutation({
     mutationFn: async (policyId: string) => {
-      const response = await fetch(`/api/policies/${policyId}`, {
+      const response = await fetch(getApiUrl(`/api/policies/${policyId}`), {
         method: 'DELETE',
         credentials: 'include'
       })

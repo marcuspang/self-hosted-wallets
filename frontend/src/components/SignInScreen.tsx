@@ -2,6 +2,7 @@ import { Hooks } from 'porto/wagmi'
 import { useConnectors } from 'wagmi'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { getApiUrl } from '../lib/api'
 
 export function SignInScreen() {
   const connect = Hooks.useConnect()
@@ -22,7 +23,7 @@ export function SignInScreen() {
               connect.mutate({
                 connector,
                 signInWithEthereum: {
-                  authUrl: '/api/siwe'
+                  authUrl: getApiUrl('/api/siwe')
                 }
               })
             }

@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '../ui/select'
+import { getApiUrl } from '../../lib/api'
 
 interface Instance {
   id: string
@@ -58,7 +59,7 @@ export function AWSInstanceManagement() {
   const { data: instances = [] } = useQuery({
     queryKey: ['aws-instances'],
     queryFn: async () => {
-      const response = await fetch('/api/aws/instances', {
+      const response = await fetch(getApiUrl('/api/aws/instances'), {
         credentials: 'include'
       })
       if (!response.ok) {
@@ -77,7 +78,7 @@ export function AWSInstanceManagement() {
       instanceType: string
       region: string
     }) => {
-      const response = await fetch('/api/aws/instances', {
+      const response = await fetch(getApiUrl('/api/aws/instances'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -108,7 +109,7 @@ export function AWSInstanceManagement() {
           : `/api/aws/instances/${instanceId}/${action}`
       const method = action === 'terminate' ? 'DELETE' : 'POST'
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(getApiUrl(endpoint), {
         method,
         credentials: 'include'
       })
@@ -125,7 +126,7 @@ export function AWSInstanceManagement() {
 
   const deployEnclaveMutation = useMutation({
     mutationFn: async (instanceId: string) => {
-      const response = await fetch('/api/aws/enclaves/build', {
+      const response = await fetch(getApiUrl('/api/aws/enclaves/build'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

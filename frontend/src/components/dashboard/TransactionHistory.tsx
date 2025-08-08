@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow
 } from '../ui/table'
+import { getApiUrl } from '../../lib/api'
 
 interface Transaction {
   id: string
@@ -56,7 +57,7 @@ export function TransactionHistory() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['transactions-history'],
     queryFn: async () => {
-      const response = await fetch('/api/transactions/history', {
+      const response = await fetch(getApiUrl('/api/transactions/history'), {
         credentials: 'include'
       })
       if (!response.ok) {

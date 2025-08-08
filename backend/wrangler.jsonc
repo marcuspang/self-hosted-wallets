@@ -1,0 +1,23 @@
+{
+  "name": "embedded-wallet-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [
+    {
+      "binding": "NONCE_STORE",
+      "id": "your-kv-namespace-id-here",
+      "preview_id": "your-kv-namespace-preview-id-here"
+    }
+  ],
+  "vars": {
+    "JWT_SECRET": "your-jwt-secret-here"
+  },
+  "env": {
+    "production": {
+      "vars": {
+        "JWT_SECRET": "production-jwt-secret"
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   CheckCircle,
@@ -10,8 +11,7 @@ import {
   Square,
   Trash2
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -55,7 +55,7 @@ export function AWSInstanceManagement() {
     { value: 'eu-west-1', label: 'Europe (Ireland)' }
   ]
 
-  const { data: instances = [], isLoading, refetch } = useQuery({
+  const { data: instances = [] } = useQuery({
     queryKey: ['aws-instances'],
     queryFn: async () => {
       const response = await fetch('/api/aws/instances', {
@@ -64,20 +64,26 @@ export function AWSInstanceManagement() {
       if (!response.ok) {
         throw new Error('Failed to fetch instances')
       }
-      const data = await response.json()
+      const data = (await response.json()) as { instances: Instance[] }
       return data.instances || []
     }
   })
 
   const createInstanceMutation = useMutation({
-    mutationFn: async ({ instanceType, region }: { instanceType: string; region: string }) => {
+    mutationFn: async ({
+      instanceType,
+      region
+    }: {
+      instanceType: string
+      region: string
+    }) => {
       const response = await fetch('/api/aws/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ instanceType, region })
       })
-      
+
       if (!response.ok) {
         throw new Error('Failed to create instance')
       }
@@ -89,10 +95,17 @@ export function AWSInstanceManagement() {
   })
 
   const controlInstanceMutation = useMutation({
-    mutationFn: async ({ instanceId, action }: { instanceId: string; action: 'start' | 'stop' | 'terminate' }) => {
-      const endpoint = action === 'terminate' 
-        ? `/api/aws/instances/${instanceId}` 
-        : `/api/aws/instances/${instanceId}/${action}`
+    mutationFn: async ({
+      instanceId,
+      action
+    }: {
+      instanceId: string
+      action: 'start' | 'stop' | 'terminate'
+    }) => {
+      const endpoint =
+        action === 'terminate'
+          ? `/api/aws/instances/${instanceId}`
+          : `/api/aws/instances/${instanceId}/${action}`
       const method = action === 'terminate' ? 'DELETE' : 'POST'
 
       const response = await fetch(endpoint, {
@@ -136,7 +149,10 @@ export function AWSInstanceManagement() {
     })
   }
 
-  const controlInstance = (instanceId: string, action: 'start' | 'stop' | 'terminate') => {
+  const controlInstance = (
+    instanceId: string,
+    action: 'start' | 'stop' | 'terminate'
+  ) => {
     controlInstanceMutation.mutate({ instanceId, action })
   }
 
@@ -227,7 +243,10 @@ export function AWSInstanceManagement() {
               </Select>
             </div>
           </div>
-          <Button disabled={createInstanceMutation.isPending} onClick={createInstance}>
+          <Button
+            disabled={createInstanceMutation.isPending}
+            onClick={createInstance}
+          >
             {createInstanceMutation.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (

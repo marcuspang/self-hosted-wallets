@@ -1,25 +1,35 @@
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  AlertCircle,
+  Clock,
+  DollarSign,
+  Loader2,
+  Plus,
+  Settings,
+  Shield,
+  Trash2
+} from 'lucide-react'
+import { useState } from 'react'
+import { Alert, AlertDescription } from '../ui/alert'
+import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '../ui/card'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { Badge } from '../ui/badge'
-import { Alert, AlertDescription } from '../ui/alert'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '../ui/select'
 import { Switch } from '../ui/switch'
-import { 
-  Shield, 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  DollarSign,
-  Clock,
-  Settings,
-  AlertCircle,
-  CheckCircle,
-  Loader2
-} from 'lucide-react'
 
 interface Policy {
   id: string
@@ -36,9 +46,11 @@ interface Policy {
 export function PolicyConfiguration() {
   const queryClient = useQueryClient()
   const [showCreateForm, setShowCreateForm] = useState(false)
-  
+
   // Form state
-  const [policyType, setPolicyType] = useState<'spending_limit' | 'contract_permission' | 'time_restriction'>('spending_limit')
+  const [policyType, setPolicyType] = useState<
+    'spending_limit' | 'contract_permission' | 'time_restriction'
+  >('spending_limit')
   const [contractAddress, setContractAddress] = useState('')
   const [functionSignature, setFunctionSignature] = useState('')
   const [limitAmount, setLimitAmount] = useState('')
@@ -54,7 +66,7 @@ export function PolicyConfiguration() {
       if (!response.ok) {
         throw new Error('Failed to fetch policies')
       }
-      const data = await response.json()
+      const data = (await response.json()) as { policies: Policy[] }
       return data.policies || []
     }
   })
@@ -67,7 +79,7 @@ export function PolicyConfiguration() {
         credentials: 'include',
         body: JSON.stringify(policyData)
       })
-      
+
       if (!response.ok) {
         throw new Error('Failed to create policy')
       }
@@ -81,14 +93,20 @@ export function PolicyConfiguration() {
   })
 
   const updatePolicyMutation = useMutation({
-    mutationFn: async ({ policyId, isActive }: { policyId: string; isActive: boolean }) => {
+    mutationFn: async ({
+      policyId,
+      isActive
+    }: {
+      policyId: string
+      isActive: boolean
+    }) => {
       const response = await fetch('/api/policies/update', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ policyId, isActive })
       })
-      
+
       if (!response.ok) {
         throw new Error('Failed to update policy')
       }
@@ -105,7 +123,7 @@ export function PolicyConfiguration() {
         method: 'DELETE',
         credentials: 'include'
       })
-      
+
       if (!response.ok) {
         throw new Error('Failed to delete policy')
       }
@@ -118,8 +136,8 @@ export function PolicyConfiguration() {
 
   const createPolicy = () => {
     const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + parseInt(expirationDays))
-    
+    expiresAt.setDate(expiresAt.getDate() + Number.parseInt(expirationDays))
+
     const policyData: any = {
       type: policyType,
       expiresAt: expiresAt.toISOString()
@@ -130,7 +148,9 @@ export function PolicyConfiguration() {
       policyData.limitPeriod = limitPeriod
     } else if (policyType === 'contract_permission') {
       policyData.contractAddress = contractAddress
-      if (functionSignature) policyData.functionSignature = functionSignature
+      if (functionSignature) {
+        policyData.functionSignature = functionSignature
+      }
     }
 
     createPolicyMutation.mutate(policyData)
@@ -155,10 +175,14 @@ export function PolicyConfiguration() {
 
   const getPolicyIcon = (type: string) => {
     switch (type) {
-      case 'spending_limit': return <DollarSign className="h-4 w-4" />
-      case 'contract_permission': return <Settings className="h-4 w-4" />
-      case 'time_restriction': return <Clock className="h-4 w-4" />
-      default: return <Shield className="h-4 w-4" />
+      case 'spending_limit':
+        return <DollarSign className="h-4 w-4" />
+      case 'contract_permission':
+        return <Settings className="h-4 w-4" />
+      case 'time_restriction':
+        return <Clock className="h-4 w-4" />
+      default:
+        return <Shield className="h-4 w-4" />
     }
   }
 
@@ -171,7 +195,7 @@ export function PolicyConfiguration() {
           policy.functionSignature ? ` • ${policy.functionSignature}` : ''
         }`
       case 'time_restriction':
-        return `Time-based restrictions`
+        return 'Time-based restrictions'
       default:
         return 'Unknown policy type'
     }
@@ -181,8 +205,8 @@ export function PolicyConfiguration() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">Policy Configuration</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="font-medium text-lg">Policy Configuration</h3>
+          <p className="text-muted-foreground text-sm">
             Set up transaction policies and spending limits using Porto SDK
           </p>
         </div>
@@ -203,14 +227,21 @@ export function PolicyConfiguration() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="policy-type">Policy Type</Label>
-              <Select value={policyType} onValueChange={(value: any) => setPolicyType(value)}>
+              <Select
+                onValueChange={(value: any) => setPolicyType(value)}
+                value={policyType}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="spending_limit">Spending Limit</SelectItem>
-                  <SelectItem value="contract_permission">Contract Permission</SelectItem>
-                  <SelectItem value="time_restriction">Time Restriction</SelectItem>
+                  <SelectItem value="contract_permission">
+                    Contract Permission
+                  </SelectItem>
+                  <SelectItem value="time_restriction">
+                    Time Restriction
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -222,16 +253,16 @@ export function PolicyConfiguration() {
                     <Label htmlFor="limit-amount">Limit Amount (ETH)</Label>
                     <Input
                       id="limit-amount"
-                      type="number"
-                      step="0.001"
-                      placeholder="1.0"
-                      value={limitAmount}
                       onChange={(e) => setLimitAmount(e.target.value)}
+                      placeholder="1.0"
+                      step="0.001"
+                      type="number"
+                      value={limitAmount}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="limit-period">Period</Label>
-                    <Select value={limitPeriod} onValueChange={setLimitPeriod}>
+                    <Select onValueChange={setLimitPeriod} value={limitPeriod}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -253,18 +284,20 @@ export function PolicyConfiguration() {
                   <Label htmlFor="contract-address">Contract Address</Label>
                   <Input
                     id="contract-address"
+                    onChange={(e) => setContractAddress(e.target.value)}
                     placeholder="0x..."
                     value={contractAddress}
-                    onChange={(e) => setContractAddress(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="function-signature">Function Signature (Optional)</Label>
+                  <Label htmlFor="function-signature">
+                    Function Signature (Optional)
+                  </Label>
                   <Input
                     id="function-signature"
+                    onChange={(e) => setFunctionSignature(e.target.value)}
                     placeholder="e.g., transfer(address,uint256)"
                     value={functionSignature}
-                    onChange={(e) => setFunctionSignature(e.target.value)}
                   />
                 </div>
               </>
@@ -274,21 +307,27 @@ export function PolicyConfiguration() {
               <Label htmlFor="expiration">Expires in (days)</Label>
               <Input
                 id="expiration"
-                type="number"
-                placeholder="30"
-                value={expirationDays}
                 onChange={(e) => setExpirationDays(e.target.value)}
+                placeholder="30"
+                type="number"
+                value={expirationDays}
               />
             </div>
 
             <div className="flex space-x-2">
-              <Button onClick={createPolicy} disabled={createPolicyMutation.isPending}>
+              <Button
+                disabled={createPolicyMutation.isPending}
+                onClick={createPolicy}
+              >
                 {createPolicyMutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
                 Create Policy
               </Button>
-              <Button variant="outline" onClick={() => setShowCreateForm(false)}>
+              <Button
+                onClick={() => setShowCreateForm(false)}
+                variant="outline"
+              >
                 Cancel
               </Button>
             </div>
@@ -308,13 +347,14 @@ export function PolicyConfiguration() {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                No policies configured. Create your first policy to secure your wallets.
+                No policies configured. Create your first policy to secure your
+                wallets.
               </AlertDescription>
             </Alert>
           ) : (
             <div className="space-y-4">
               {policies.map((policy) => (
-                <div key={policy.id} className="border rounded-lg p-4">
+                <div className="rounded-lg border p-4" key={policy.id}>
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2">
@@ -322,30 +362,36 @@ export function PolicyConfiguration() {
                         <span className="font-medium capitalize">
                           {policy.type.replace('_', ' ')}
                         </span>
-                        <Badge variant={policy.isActive ? 'default' : 'secondary'}>
+                        <Badge
+                          variant={policy.isActive ? 'default' : 'secondary'}
+                        >
                           {policy.isActive ? 'Active' : 'Inactive'}
                         </Badge>
                         {new Date(policy.expiresAt!) < new Date() && (
                           <Badge variant="destructive">Expired</Badge>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-muted-foreground text-sm">
                         {getPolicyDescription(policy)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        Created: {new Date(policy.createdAt).toLocaleDateString()} • 
-                        Expires: {new Date(policy.expiresAt!).toLocaleDateString()}
+                      <p className="text-muted-foreground text-xs">
+                        Created:{' '}
+                        {new Date(policy.createdAt).toLocaleDateString()} •
+                        Expires:{' '}
+                        {new Date(policy.expiresAt!).toLocaleDateString()}
                       </p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Switch
                         checked={policy.isActive}
-                        onCheckedChange={(checked) => togglePolicy(policy.id, checked)}
+                        onCheckedChange={(checked) =>
+                          togglePolicy(policy.id, checked)
+                        }
                       />
                       <Button
+                        onClick={() => deletePolicy(policy.id)}
                         size="sm"
                         variant="destructive"
-                        onClick={() => deletePolicy(policy.id)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -366,38 +412,38 @@ export function PolicyConfiguration() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Button
-              variant="outline"
               onClick={() => {
                 setPolicyType('spending_limit')
                 setLimitAmount('0.1')
                 setLimitPeriod('day')
                 setShowCreateForm(true)
               }}
+              variant="outline"
             >
               <DollarSign className="mr-2 h-4 w-4" />
               Daily Limit (0.1 ETH)
             </Button>
             <Button
-              variant="outline"
               onClick={() => {
                 setPolicyType('spending_limit')
                 setLimitAmount('1.0')
                 setLimitPeriod('week')
                 setShowCreateForm(true)
               }}
+              variant="outline"
             >
               <DollarSign className="mr-2 h-4 w-4" />
               Weekly Limit (1.0 ETH)
             </Button>
             <Button
-              variant="outline"
               onClick={() => {
                 setPolicyType('contract_permission')
                 setContractAddress('')
                 setShowCreateForm(true)
               }}
+              variant="outline"
             >
               <Settings className="mr-2 h-4 w-4" />
               Contract Whitelist

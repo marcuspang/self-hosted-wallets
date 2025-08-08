@@ -1,26 +1,29 @@
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  AlertCircle,
+  Copy,
+  Eye,
+  EyeOff,
+  Key,
+  Loader2,
+  Plus,
+  Send,
+  Shield,
+  Wallet
+} from 'lucide-react'
+import { useState } from 'react'
+import { Alert, AlertDescription } from '../ui/alert'
+import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '../ui/card'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { Badge } from '../ui/badge'
-import { Alert, AlertDescription } from '../ui/alert'
-import { Separator } from '../ui/separator'
-import { 
-  Wallet, 
-  Plus, 
-  Send, 
-  Key, 
-  Copy,
-  CheckCircle,
-  AlertCircle,
-  Loader2,
-  Shield,
-  Eye,
-  EyeOff
-} from 'lucide-react'
-import { useAccount } from 'wagmi'
 
 interface WalletInfo {
   address: string
@@ -31,7 +34,6 @@ interface WalletInfo {
 }
 
 export function WalletOperations() {
-  const account = useAccount()
   const queryClient = useQueryClient()
   const [newWalletName, setNewWalletName] = useState('')
   const [selectedWallet, setSelectedWallet] = useState<string>('')
@@ -49,20 +51,26 @@ export function WalletOperations() {
       if (!response.ok) {
         throw new Error('Failed to fetch wallets')
       }
-      const data = await response.json()
+      const data = (await response.json()) as { wallets: WalletInfo[] }
       return data.wallets || []
     }
   })
 
   const generateWalletMutation = useMutation({
-    mutationFn: async ({ walletName, instanceId }: { walletName: string; instanceId: string }) => {
+    mutationFn: async ({
+      walletName,
+      instanceId
+    }: {
+      walletName: string
+      instanceId: string
+    }) => {
       const response = await fetch('/api/wallet/generate-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ walletName, instanceId })
       })
-      
+
       if (!response.ok) {
         throw new Error('Failed to generate wallet')
       }
@@ -78,14 +86,24 @@ export function WalletOperations() {
   })
 
   const sendTransactionMutation = useMutation({
-    mutationFn: async ({ from, to, value, userShare }: { from: string; to: string; value: string; userShare?: string }) => {
+    mutationFn: async ({
+      from,
+      to,
+      value,
+      userShare
+    }: {
+      from: string
+      to: string
+      value: string
+      userShare?: string
+    }) => {
       const response = await fetch('/api/wallet/send-transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ from, to, value, userShare })
       })
-      
+
       if (!response.ok) {
         throw new Error('Failed to send transaction')
       }
@@ -114,7 +132,9 @@ export function WalletOperations() {
   })
 
   const generateWallet = () => {
-    if (!newWalletName.trim()) return
+    if (!newWalletName.trim()) {
+      return
+    }
     generateWalletMutation.mutate({
       walletName: newWalletName,
       instanceId: 'instance-123' // This would come from selected instance
@@ -122,7 +142,9 @@ export function WalletOperations() {
   }
 
   const sendTransaction = () => {
-    if (!selectedWallet || !sendToAddress || !sendAmount) return
+    if (!(selectedWallet && sendToAddress && sendAmount)) {
+      return
+    }
     sendTransactionMutation.mutate({
       from: selectedWallet,
       to: sendToAddress,
@@ -142,8 +164,8 @@ export function WalletOperations() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">Wallet Operations</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="font-medium text-lg">Wallet Operations</h3>
+        <p className="text-muted-foreground text-sm">
           Generate wallets using Shamir Secret Sharing and manage transactions
         </p>
       </div>
@@ -164,12 +186,15 @@ export function WalletOperations() {
             <Label htmlFor="wallet-name">Wallet Name</Label>
             <Input
               id="wallet-name"
+              onChange={(e) => setNewWalletName(e.target.value)}
               placeholder="My Wallet"
               value={newWalletName}
-              onChange={(e) => setNewWalletName(e.target.value)}
             />
           </div>
-          <Button onClick={generateWallet} disabled={generateWalletMutation.isPending || !newWalletName.trim()}>
+          <Button
+            disabled={generateWalletMutation.isPending || !newWalletName.trim()}
+            onClick={generateWallet}
+          >
             {generateWalletMutation.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -185,22 +210,28 @@ export function WalletOperations() {
                 <div className="space-y-2">
                   <p>Your secret share (keep this safe!):</p>
                   <div className="flex items-center space-x-2">
-                    <code className={`text-xs bg-muted p-2 rounded flex-1 ${
-                      showUserShare ? '' : 'filter blur-sm'
-                    }`}>
+                    <code
+                      className={`flex-1 rounded bg-muted p-2 text-xs ${
+                        showUserShare ? '' : 'blur-sm filter'
+                      }`}
+                    >
                       {userShare}
                     </code>
                     <Button
+                      onClick={() => setShowUserShare(!showUserShare)}
                       size="sm"
                       variant="outline"
-                      onClick={() => setShowUserShare(!showUserShare)}
                     >
-                      {showUserShare ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      {showUserShare ? (
+                        <EyeOff className="h-3 w-3" />
+                      ) : (
+                        <Eye className="h-3 w-3" />
+                      )}
                     </Button>
                     <Button
+                      onClick={() => copyToClipboard(userShare)}
                       size="sm"
                       variant="outline"
-                      onClick={() => copyToClipboard(userShare)}
                     >
                       <Copy className="h-3 w-3" />
                     </Button>
@@ -231,32 +262,42 @@ export function WalletOperations() {
           ) : (
             <div className="space-y-4">
               {wallets.map((wallet) => (
-                <div key={wallet.address} className="border rounded-lg p-4">
+                <div className="rounded-lg border p-4" key={wallet.address}>
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2">
                         <span className="font-medium">{wallet.name}</span>
-                        <Badge variant={wallet.status === 'active' ? 'default' : 'secondary'}>
+                        <Badge
+                          variant={
+                            wallet.status === 'active' ? 'default' : 'secondary'
+                          }
+                        >
                           {wallet.status}
                         </Badge>
                       </div>
-                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                        <span>{wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}</span>
+                      <div className="flex items-center space-x-2 text-muted-foreground text-sm">
+                        <span>
+                          {wallet.address.slice(0, 6)}...
+                          {wallet.address.slice(-4)}
+                        </span>
                         <Button
+                          onClick={() => copyToClipboard(wallet.address)}
                           size="sm"
                           variant="ghost"
-                          onClick={() => copyToClipboard(wallet.address)}
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
                       </div>
                       <div className="text-sm">
-                        Balance: <span className="font-medium">{wallet.balance} ETH</span>
+                        Balance:{' '}
+                        <span className="font-medium">
+                          {wallet.balance} ETH
+                        </span>
                         <Button
+                          className="ml-2 h-6 px-2"
+                          onClick={() => refreshBalance(wallet.address)}
                           size="sm"
                           variant="ghost"
-                          onClick={() => refreshBalance(wallet.address)}
-                          className="ml-2 h-6 px-2"
                         >
                           Refresh
                         </Button>
@@ -286,16 +327,18 @@ export function WalletOperations() {
             <div className="space-y-2">
               <Label htmlFor="from-wallet">From Wallet</Label>
               <select
-                className="w-full p-2 border rounded-md"
-                value={selectedWallet}
+                className="w-full rounded-md border p-2"
                 onChange={(e) => setSelectedWallet(e.target.value)}
+                value={selectedWallet}
               >
                 <option value="">Select wallet...</option>
-                {wallets.filter(w => w.status === 'active').map((wallet) => (
-                  <option key={wallet.address} value={wallet.address}>
-                    {wallet.name} ({wallet.balance} ETH)
-                  </option>
-                ))}
+                {wallets
+                  .filter((w) => w.status === 'active')
+                  .map((wallet) => (
+                    <option key={wallet.address} value={wallet.address}>
+                      {wallet.name} ({wallet.balance} ETH)
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -303,9 +346,9 @@ export function WalletOperations() {
               <Label htmlFor="to-address">To Address</Label>
               <Input
                 id="to-address"
+                onChange={(e) => setSendToAddress(e.target.value)}
                 placeholder="0x..."
                 value={sendToAddress}
-                onChange={(e) => setSendToAddress(e.target.value)}
               />
             </div>
 
@@ -313,29 +356,36 @@ export function WalletOperations() {
               <Label htmlFor="amount">Amount (ETH)</Label>
               <Input
                 id="amount"
-                type="number"
-                step="0.001"
-                placeholder="0.1"
-                value={sendAmount}
                 onChange={(e) => setSendAmount(e.target.value)}
+                placeholder="0.1"
+                step="0.001"
+                type="number"
+                value={sendAmount}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="user-share">Your Secret Share (if required)</Label>
+              <Label htmlFor="user-share">
+                Your Secret Share (if required)
+              </Label>
               <Input
                 id="user-share"
-                type="password"
-                placeholder="Enter your secret share if needed"
-                value={userShare}
                 onChange={(e) => setUserShare(e.target.value)}
+                placeholder="Enter your secret share if needed"
+                type="password"
+                value={userShare}
               />
             </div>
 
-            <Button 
-              onClick={sendTransaction} 
-              disabled={sendTransactionMutation.isPending || !selectedWallet || !sendToAddress || !sendAmount}
+            <Button
               className="w-full"
+              disabled={
+                sendTransactionMutation.isPending ||
+                !selectedWallet ||
+                !sendToAddress ||
+                !sendAmount
+              }
+              onClick={sendTransaction}
             >
               {sendTransactionMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -1,26 +1,38 @@
-import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button } from '../ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
-import { Badge } from '../ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'
-import { Alert, AlertDescription } from '../ui/alert'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
-import { 
-  History, 
-  ExternalLink, 
-  Filter,
-  RefreshCw,
-  Download,
-  Fuel,
-  Send,
-  ArrowUpRight,
+import {
+  AlertCircle,
   ArrowDownLeft,
-  Clock,
+  ArrowUpRight,
   CheckCircle,
-  XCircle,
-  AlertCircle
+  Clock,
+  Download,
+  ExternalLink,
+  Filter,
+  Fuel,
+  History,
+  RefreshCw,
+  XCircle
 } from 'lucide-react'
+import { useState } from 'react'
+import { Alert, AlertDescription } from '../ui/alert'
+import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '../ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '../ui/table'
 
 interface Transaction {
   id: string
@@ -37,7 +49,9 @@ interface Transaction {
 }
 
 export function TransactionHistory() {
-  const [filter, setFilter] = useState<'all' | 'sent' | 'received' | 'sponsored'>('all')
+  const [filter, setFilter] = useState<
+    'all' | 'sent' | 'received' | 'sponsored'
+  >('all')
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['transactions-history'],
@@ -48,7 +62,14 @@ export function TransactionHistory() {
       if (!response.ok) {
         throw new Error('Failed to fetch transaction history')
       }
-      return response.json()
+      return (await response.json()) as {
+        transactions: Transaction[]
+        gasStats: {
+          totalSponsored: number
+          totalSaved: string
+          sponsoredCount: number
+        }
+      }
     }
   })
 
@@ -59,33 +80,43 @@ export function TransactionHistory() {
     sponsoredCount: 0
   }
 
-  const filteredTransactions = transactions.filter(tx => {
+  const filteredTransactions = transactions.filter((tx) => {
     switch (filter) {
-      case 'sent': return tx.type === 'sent'
-      case 'received': return tx.type === 'received'
-      case 'sponsored': return tx.gasSponsored
-      default: return true
+      case 'sent':
+        return tx.type === 'sent'
+      case 'received':
+        return tx.type === 'received'
+      case 'sponsored':
+        return tx.gasSponsored
+      default:
+        return true
     }
   })
 
   const formatValue = (valueWei: string) => {
-    const eth = parseFloat(valueWei) / 1e18
+    const eth = Number.parseFloat(valueWei) / 1e18
     return eth.toFixed(6)
   }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'confirmed': return <CheckCircle className="h-4 w-4 text-green-600" />
-      case 'pending': return <Clock className="h-4 w-4 text-yellow-600" />
-      case 'failed': return <XCircle className="h-4 w-4 text-red-600" />
-      default: return <AlertCircle className="h-4 w-4 text-gray-600" />
+      case 'confirmed':
+        return <CheckCircle className="h-4 w-4 text-green-600" />
+      case 'pending':
+        return <Clock className="h-4 w-4 text-yellow-600" />
+      case 'failed':
+        return <XCircle className="h-4 w-4 text-red-600" />
+      default:
+        return <AlertCircle className="h-4 w-4 text-gray-600" />
     }
   }
 
   const getTypeIcon = (type: string) => {
-    return type === 'sent' ? 
-      <ArrowUpRight className="h-4 w-4 text-red-600" /> : 
+    return type === 'sent' ? (
+      <ArrowUpRight className="h-4 w-4 text-red-600" />
+    ) : (
       <ArrowDownLeft className="h-4 w-4 text-green-600" />
+    )
   }
 
   const openInExplorer = (txHash: string) => {
@@ -96,18 +127,20 @@ export function TransactionHistory() {
   const exportTransactions = () => {
     const csv = [
       'Date,Hash,From,To,Amount,Gas,Sponsored,Status',
-      ...filteredTransactions.map(tx => [
-        new Date(tx.createdAt).toLocaleDateString(),
-        tx.txHash,
-        tx.walletAddress,
-        tx.toAddress,
-        formatValue(tx.valueWei),
-        tx.gasUsed,
-        tx.gasSponsored,
-        tx.status
-      ].join(','))
+      ...filteredTransactions.map((tx) =>
+        [
+          new Date(tx.createdAt).toLocaleDateString(),
+          tx.txHash,
+          tx.walletAddress,
+          tx.toAddress,
+          formatValue(tx.valueWei),
+          tx.gasUsed,
+          tx.gasSponsored,
+          tx.status
+        ].join(',')
+      )
     ].join('\n')
-    
+
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -120,18 +153,25 @@ export function TransactionHistory() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">Transaction History</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="font-medium text-lg">Transaction History</h3>
+          <p className="text-muted-foreground text-sm">
             View all transactions and gas sponsorship details
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={exportTransactions}>
+          <Button onClick={exportTransactions} size="sm" variant="outline">
             <Download className="mr-2 h-3 w-3" />
             Export
           </Button>
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-            <RefreshCw className={`mr-2 h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
+          <Button
+            disabled={isLoading}
+            onClick={() => refetch()}
+            size="sm"
+            variant="outline"
+          >
+            <RefreshCw
+              className={`mr-2 h-3 w-3 ${isLoading ? 'animate-spin' : ''}`}
+            />
             Refresh
           </Button>
         </div>
@@ -141,40 +181,34 @@ export function TransactionHistory() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Gas Sponsored</CardTitle>
+            <CardTitle className="font-medium text-sm">Gas Sponsored</CardTitle>
             <Fuel className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{gasStats.sponsoredCount}</div>
-            <p className="text-xs text-muted-foreground">
-              transactions
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Saved</CardTitle>
-            <Fuel className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{gasStats.totalSaved} ETH</div>
-            <p className="text-xs text-muted-foreground">
-              in gas fees
-            </p>
+            <div className="font-bold text-2xl">{gasStats.sponsoredCount}</div>
+            <p className="text-muted-foreground text-xs">transactions</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">EIP-7702</CardTitle>
+            <CardTitle className="font-medium text-sm">Total Saved</CardTitle>
+            <Fuel className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="font-bold text-2xl">{gasStats.totalSaved} ETH</div>
+            <p className="text-muted-foreground text-xs">in gas fees</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="font-medium text-sm">EIP-7702</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Active</div>
-            <p className="text-xs text-muted-foreground">
-              delegation enabled
-            </p>
+            <div className="font-bold text-2xl">Active</div>
+            <p className="text-muted-foreground text-xs">delegation enabled</p>
           </CardContent>
         </Card>
       </div>
@@ -189,7 +223,10 @@ export function TransactionHistory() {
             </CardTitle>
             <div className="flex items-center space-x-2">
               <Filter className="h-4 w-4" />
-              <Select value={filter} onValueChange={(value: any) => setFilter(value)}>
+              <Select
+                onValueChange={(value: any) => setFilter(value)}
+                value={filter}
+              >
                 <SelectTrigger className="w-32">
                   <SelectValue />
                 </SelectTrigger>
@@ -208,7 +245,8 @@ export function TransactionHistory() {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                No transactions found. Send your first transaction to see it here.
+                No transactions found. Send your first transaction to see it
+                here.
               </AlertDescription>
             </Alert>
           ) : (
@@ -222,7 +260,7 @@ export function TransactionHistory() {
                   <TableHead>Gas</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead></TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -245,29 +283,38 @@ export function TransactionHistory() {
                           <>
                             <div className="text-muted-foreground">To:</div>
                             <code className="text-xs">
-                              {tx.toAddress.slice(0, 6)}...{tx.toAddress.slice(-4)}
+                              {tx.toAddress.slice(0, 6)}...
+                              {tx.toAddress.slice(-4)}
                             </code>
                           </>
                         ) : (
                           <>
                             <div className="text-muted-foreground">From:</div>
                             <code className="text-xs">
-                              {tx.walletAddress.slice(0, 6)}...{tx.walletAddress.slice(-4)}
+                              {tx.walletAddress.slice(0, 6)}...
+                              {tx.walletAddress.slice(-4)}
                             </code>
                           </>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={tx.type === 'sent' ? 'text-red-600' : 'text-green-600'}>
-                        {tx.type === 'sent' ? '-' : '+'}{formatValue(tx.valueWei)} ETH
+                      <span
+                        className={
+                          tx.type === 'sent' ? 'text-red-600' : 'text-green-600'
+                        }
+                      >
+                        {tx.type === 'sent' ? '-' : '+'}
+                        {formatValue(tx.valueWei)} ETH
                       </span>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-1">
-                        <span className="text-xs">{tx.gasUsed.toLocaleString()}</span>
+                        <span className="text-xs">
+                          {tx.gasUsed.toLocaleString()}
+                        </span>
                         {tx.gasSponsored && (
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge className="text-xs" variant="secondary">
                             <Fuel className="mr-1 h-2 w-2" />
                             Sponsored
                           </Badge>
@@ -277,17 +324,17 @@ export function TransactionHistory() {
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         {getStatusIcon(tx.status)}
-                        <span className="capitalize text-sm">{tx.status}</span>
+                        <span className="text-sm capitalize">{tx.status}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="text-muted-foreground text-sm">
                       {new Date(tx.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
                       <Button
+                        onClick={() => openInExplorer(tx.txHash)}
                         size="sm"
                         variant="ghost"
-                        onClick={() => openInExplorer(tx.txHash)}
                       >
                         <ExternalLink className="h-3 w-3" />
                       </Button>

@@ -230,7 +230,7 @@ app.get('/aws/instances', authMiddleware, async (c) => {
 
 app.post('/aws/instances', authMiddleware, async (c) => {
   try {
-    const { instanceType, region } = await c.req.json()
+    const { instanceType } = await c.req.json()
 
     const ec2 = getEC2Client(c)
     const command = new RunInstancesCommand({
@@ -339,7 +339,7 @@ app.get('/wallet/list', authMiddleware, async (c) => {
 
 app.post('/wallet/generate-keys', authMiddleware, async (c) => {
   try {
-    const { walletName, instanceId } = await c.req.json()
+    // const { walletName, instanceId } = await c.req.json()
 
     // This would typically involve:
     // 1. Generate keys in Nitro Enclave using SSS
@@ -360,7 +360,7 @@ app.post('/wallet/generate-keys', authMiddleware, async (c) => {
 
 app.post('/wallet/send-transaction', authMiddleware, async (c) => {
   try {
-    const { from, to, value, userShare } = await c.req.json()
+    // const { from, to, value, userShare } = await c.req.json()
 
     // This would typically involve:
     // 1. Reconstruct key using SSS shares
@@ -381,7 +381,7 @@ app.post('/wallet/send-transaction', authMiddleware, async (c) => {
 
 app.get('/wallet/:address/balance', authMiddleware, async (c) => {
   try {
-    const address = c.req.param('address')
+    // const address = c.req.param('address')
 
     // This would query blockchain for actual balance
     const mockBalance = Math.random().toFixed(6)
@@ -418,7 +418,7 @@ app.get('/policies/list', authMiddleware, async (c) => {
 
 app.post('/policies/create', authMiddleware, async (c) => {
   try {
-    const policyData = await c.req.json()
+    // const policyData = await c.req.json()
 
     // This would store policy in database and configure with Porto SDK
     const policyId = `policy_${Date.now()}`
@@ -434,7 +434,7 @@ app.post('/policies/create', authMiddleware, async (c) => {
 
 app.put('/policies/update', authMiddleware, async (c) => {
   try {
-    const { policyId, isActive } = await c.req.json()
+    // const { policyId, isActive } = await c.req.json()
 
     // This would update policy in database
     return c.json({
@@ -448,7 +448,7 @@ app.put('/policies/update', authMiddleware, async (c) => {
 
 app.delete('/policies/:id', authMiddleware, async (c) => {
   try {
-    const policyId = c.req.param('id')
+    // const policyId = c.req.param('id')
 
     // This would delete policy from database
     return c.json({

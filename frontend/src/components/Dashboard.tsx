@@ -12,7 +12,7 @@ import {
 import { useQueryState } from 'nuqs'
 import { useAccount, useDisconnect } from 'wagmi'
 import { SecureAWSIntegration } from './dashboard/SecureAWSIntegration'
-import { DatabaseSetup } from './dashboard/DatabaseSetup'
+import { SecureDatabaseSetup } from './dashboard/SecureDatabaseSetup'
 import { PolicyConfiguration } from './dashboard/PolicyConfiguration'
 import { TransactionHistory } from './dashboard/TransactionHistory'
 import { WalletOperations } from './dashboard/WalletOperations'
@@ -234,7 +234,7 @@ export function Dashboard() {
             </div>
           )}
 
-          {activeTab === 'database' && <DatabaseSetup />}
+          {activeTab === 'database' && <SecureDatabaseSetup />}
           {activeTab === 'aws' && <SecureAWSIntegration />}
           {activeTab === 'wallet' && <WalletOperations />}
           {activeTab === 'policies' && <PolicyConfiguration />}

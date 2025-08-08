@@ -738,7 +738,7 @@ function createAPIRoutes() {
   })
 
   // Database Routes
-  api.post('/database/test-connection', async (c) => {
+  api.post('/database/test-connection', authMiddleware, async (c) => {
     try {
       const { databaseUrl } = await c.req.json()
       if (!databaseUrl) {
@@ -755,7 +755,7 @@ function createAPIRoutes() {
     }
   })
 
-  api.post('/database/setup-schema', async (c) => {
+  api.post('/database/setup-schema', authMiddleware, async (c) => {
     try {
       const { databaseUrl } = await c.req.json()
       if (!databaseUrl) {

@@ -11,10 +11,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { getApiUrl } from '../../lib/api'
-import {
-  credentialManager,
-  useCredentialStatus
-} from '../../lib/credentialManager'
+import { credentialManager } from '../../lib/credentialManager'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import {
@@ -44,7 +41,6 @@ interface OperationStats {
 
 export function AWSOperationCenter() {
   const queryClient = useQueryClient()
-  const credentialStatus = useCredentialStatus()
   const [activeTab, setActiveTab] = useState('overview')
 
   const { data: serverCredentialStatus } = useQuery<CredentialStatus>({

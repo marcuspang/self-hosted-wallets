@@ -60,22 +60,17 @@ async function deployEnclaveToNitroEC2(
     const sshResult = await executeSSHCommands(
       instanceIP,
       [
+        // Ensure Nitro service is running
+        'sudo systemctl is-active nitro-enclaves-allocator.service || sudo systemctl start nitro-enclaves-allocator.service',
         // Build Docker image on EC2 instance
         'cd /home/ec2-user/enclave',
         'sudo docker build -t wallet-enclave:latest .',
-
         // Convert Docker image to EIF using Nitro CLI
         'sudo nitro-cli build-enclave --docker-uri wallet-enclave:latest --output-file wallet-enclave.eif',
-
         // Terminate any existing enclaves
         'sudo nitro-cli terminate-enclave --all || true',
-
         // Run the enclave with proper configuration
         'sudo nitro-cli run-enclave --cpu-count 2 --memory 1024 --enclave-cid 10 --eif-path wallet-enclave.eif --debug-mode',
-
-        // Wait for enclave to start
-        'sleep 5',
-
         // Verify enclave is running
         'sudo nitro-cli describe-enclaves'
       ],
@@ -1273,35 +1268,28 @@ function createAPIRoutes() {
 set -e
 
 # Update system
-yum update -y
+sudo yum update -y
 
 # Install required packages
-yum install -y docker git gcc make
+sudo amazon-linux-extras install aws-nitro-enclaves-cli -y
+sudo yum install aws-nitro-enclaves-cli-devel -y
 
-# Start and enable Docker
-systemctl start docker
-systemctl enable docker
-
-# Add ec2-user to docker group
-usermod -a -G docker ec2-user
-
-# Install Nitro Enclaves CLI
-amazon-linux-extras install aws-nitro-enclaves-cli -y
-
-# Start Nitro Enclaves allocator service
-systemctl start nitro-enclaves-allocator.service
-systemctl enable nitro-enclaves-allocator.service
+sudo usermod -aG ne ec2-user
+sudo usermod -aG docker ec2-user
 
 # Configure enclave resources (allocate 2 CPUs and 1024MB memory)
-echo "memory_mib: 1024" >> /etc/nitro_enclaves/allocator.yaml
-echo "cpu_count: 2" >> /etc/nitro_enclaves/allocator.yaml
+# mkdir -p /etc/nitro_enclaves
+# cat > /etc/nitro_enclaves/allocator.yaml << 'EOF'
+# memory_mib: 1024
+# cpu_count: 2
+# EOF
 
-# Restart allocator with new configuration
-systemctl restart nitro-enclaves-allocator.service
+sudo systemctl enable --now docker
 
 # Install Node.js for application management
-curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
-yum install -y nodejs
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc
+nvm install --lts
 
 # Create directories for enclave management
 mkdir -p /home/ec2-user/enclave
@@ -1469,23 +1457,26 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
 
         // Commands to verify enclave setup
         const verificationCommands = [
-          'echo "=== System Info ==="',
           'uname -a',
-          'echo "=== Nitro CLI Installation ==="',
-          'which nitro-cli || echo "nitro-cli not found in PATH"',
-          'nitro-cli --version || echo "Failed to get nitro-cli version"',
-          'echo "=== Nitro Enclaves Service Status ==="',
-          'systemctl status nitro-enclaves-allocator.service || echo "Service not running"',
-          'echo "=== Enclave Configuration ==="',
-          'cat /etc/nitro_enclaves/allocator.yaml || echo "Config file not found"',
-          'echo "=== Docker Status ==="',
-          'systemctl status docker || echo "Docker not running"',
-          'docker --version || echo "Docker not installed"',
-          'echo "=== Available Resources ==="',
-          'lscpu | grep -E "CPU|Thread|Core" || echo "CPU info not available"',
-          'free -h || echo "Memory info not available"',
-          'echo "=== Current Enclaves ==="',
-          'nitro-cli describe-enclaves || echo "No enclaves running or CLI not available"'
+          // Install Nitro CLI if missing
+          'if ! command -v nitro-cli &> /dev/null; then sudo amazon-linux-extras install aws-nitro-enclaves-cli -y; fi',
+          // Install Docker if missing
+          'if ! command -v docker &> /dev/null; then sudo yum install -y docker; sudo systemctl start docker; sudo systemctl enable docker; sudo usermod -a -G docker ec2-user; fi',
+          'nitro-cli --version',
+          // Stop service first to avoid conflicts
+          'sudo systemctl stop nitro-enclaves-allocator.service || true',
+          // Set SELinux context if present
+          'sudo restorecon -R /var/log/nitro_enclaves 2>/dev/null || true',
+          // Clear any systemd state
+          'sudo systemctl daemon-reload',
+          // Start and enable the service
+          'sudo systemctl start nitro-enclaves-allocator.service',
+          'sudo systemctl enable nitro-enclaves-allocator.service',
+          'sleep 3',
+          'systemctl status nitro-enclaves-allocator.service',
+          // Get detailed error information if service failed
+          'if ! systemctl is-active --quiet nitro-enclaves-allocator.service; then sudo journalctl -u nitro-enclaves-allocator.service -n 20 --no-pager; fi',
+          'nitro-cli describe-enclaves'
         ]
 
         const result = await executeSSHCommands(

@@ -61,7 +61,10 @@ export function SecureDatabaseSetup() {
         url,
         name:
           name ||
-          databaseManager.generateConnectionName({ ...connectionDetails, url }),
+          databaseManager.generateConnectionName({
+            ...connectionDetails,
+            url
+          } as DatabaseConnection),
         type: connectionDetails.type || 'postgresql',
         host: connectionDetails.host,
         port: connectionDetails.port,
@@ -79,6 +82,7 @@ export function SecureDatabaseSetup() {
       setNewConnectionName('')
     },
     onError: (error, { url }) => {
+      console.error(error)
       // Update connection status to failed
       databaseManager.updateConnectionStatus(url, false)
     }

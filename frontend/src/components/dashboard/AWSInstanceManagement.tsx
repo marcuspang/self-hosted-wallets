@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   CheckCircle,
@@ -16,6 +16,7 @@ import {
 import { useState } from 'react'
 import { getApiUrl } from '../../lib/api'
 import { CredentialManager } from '../../lib/credentialManager'
+import { useAWSInstances } from '../../hooks/useAWSInstances'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -34,13 +35,6 @@ import {
   SelectValue
 } from '../ui/select'
 
-interface Instance {
-  id: string
-  status: 'pending' | 'running' | 'stopped' | 'terminated'
-  type: string
-  region: string
-  enclaveStatus?: 'none' | 'building' | 'running' | 'failed'
-}
 
 export function AWSInstanceManagement() {
   const queryClient = useQueryClient()
@@ -63,8 +57,8 @@ export function AWSInstanceManagement() {
     { value: 'eu-west-1', label: 'Europe (Ireland)' }
   ]
 
-  // Check if credentials are available
-  const hasCredentials = CredentialManager.hasValidCredentials()
+  // Use shared AWS instances hook
+  const { data: instances = [], error: instancesError, hasCredentials } = useAWSInstances()
 
   const verifyEnclaveSetupMutation = useMutation({
     mutationFn: async (instanceId: string) => {
@@ -90,39 +84,6 @@ export function AWSInstanceManagement() {
     }
   })
 
-  const { data: instances = [], error: instancesError } = useQuery<Instance[]>({
-    queryKey: ['aws-instances'],
-    queryFn: async () => {
-      if (!hasCredentials) {
-        throw new Error('No AWS credentials configured')
-      }
-
-      const requestBody = CredentialManager.createRequestWithCredentials()
-
-      const response = await fetch(getApiUrl('/api/aws/instances/list'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(requestBody)
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch instances')
-      }
-      const data = (await response.json()) as { instances: Instance[] }
-      return data.instances || []
-    },
-    enabled: hasCredentials,
-    // Auto-poll while instances are transitioning (e.g., pending)
-    refetchInterval: (query) => {
-      const hasTransitioning = (query.state.data || []).some((i) =>
-        ['pending', 'stopping', 'shutting-down'].includes(i.status)
-      )
-      return hasTransitioning ? 3000 : false
-    },
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: true
-  })
 
   const createInstanceMutation = useMutation({
     mutationFn: async ({

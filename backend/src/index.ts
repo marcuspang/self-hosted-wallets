@@ -1195,13 +1195,26 @@ function createAPIRoutes() {
       const instances =
         response.Reservations?.flatMap(
           (reservation) =>
-            reservation.Instances?.map((instance) => ({
-              id: instance.InstanceId,
-              status: instance.State?.Name,
-              type: instance.InstanceType,
-              region: credentials.region,
-              enclaveStatus: 'none' // This would be determined by checking enclave status
-            })) || []
+            reservation.Instances?.map((instance) => {
+              const instanceId = instance.InstanceId
+              
+              // Check if this instance has an enclave connection
+              const enclaveConnection = instanceId ? enclaveClient.getConnection(instanceId) : null
+              let enclaveStatus: 'none' | 'building' | 'running' | 'failed' = 'none'
+              
+              if (enclaveConnection) {
+                // Use the deployment status from the enclave connection
+                enclaveStatus = enclaveConnection.deploymentStatus
+              }
+              
+              return {
+                id: instanceId,
+                status: instance.State?.Name,
+                type: instance.InstanceType,
+                region: credentials.region,
+                enclaveStatus
+              }
+            }) || []
         ) || []
 
       return c.json({ instances })
@@ -1550,26 +1563,37 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
         encryptionKey
       )
 
-      // First, transfer the enclave source code to the EC2 instance
-      await transferEnclaveFiles(instanceId, credentials)
-
-      // Deploy using actual Nitro CLI on the EC2 instance
-      const deploymentResult = await deployEnclaveToNitroEC2(
-        instanceId,
-        credentials
-      )
-
-      if (!deploymentResult.success) {
-        throw new Error(
-          `Nitro Enclave deployment failed: ${deploymentResult.message}`
-        )
-      }
-
       const enclaveId = `enclave-${instanceId}-${Date.now()}`
       const enclaveHost = await getEC2InstancePublicIP(instanceId, credentials)
 
-      // Add the enclave connection (will communicate via VSOCK in production)
-      enclaveClient.addConnection(instanceId, enclaveId, enclaveHost, 8080)
+      // Add the enclave connection with 'building' status
+      enclaveClient.addConnection(instanceId, enclaveId, enclaveHost, 8080, 'building')
+
+      try {
+        // First, transfer the enclave source code to the EC2 instance
+        await transferEnclaveFiles(instanceId, credentials)
+
+        // Deploy using actual Nitro CLI on the EC2 instance
+        const deploymentResult = await deployEnclaveToNitroEC2(
+          instanceId,
+          credentials
+        )
+
+        if (!deploymentResult.success) {
+          // Mark as failed and throw error
+          enclaveClient.updateDeploymentStatus(instanceId, 'failed')
+          throw new Error(
+            `Nitro Enclave deployment failed: ${deploymentResult.message}`
+          )
+        }
+
+        // Mark as running on successful deployment
+        enclaveClient.updateDeploymentStatus(instanceId, 'running')
+      } catch (error: any) {
+        // Mark as failed on any error
+        enclaveClient.updateDeploymentStatus(instanceId, 'failed')
+        throw error
+      }
 
       // In production, enclaves communicate via VSOCK, not HTTP
       // For now, we'll simulate health check success
@@ -1650,19 +1674,47 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
   )
 
   // Wallet Operations Routes
-  api.get('/wallet/list', authMiddleware, (c) => {
+  api.get('/wallet/list', authMiddleware, async (c) => {
     try {
-      // Mock data - in real implementation would query database
-      const wallets = [
-        {
-          address: '0x1234567890123456789012345678901234567890',
-          name: 'Main Wallet',
-          balance: '1.234',
-          status: 'active'
-        }
-      ]
+      const payload = c.get('jwtPayload')
+      const userAddress = payload?.sub
+      const { databaseUrl } = c.req.query()
 
-      return c.json({ wallets })
+      if (!userAddress) {
+        return c.json({ error: 'User not authenticated' }, 401)
+      }
+
+      if (!databaseUrl) {
+        // Return empty array if no database URL provided
+        return c.json({ wallets: [] })
+      }
+
+      try {
+        const client = await getDatabaseClient(databaseUrl as string)
+
+        // Query wallets for the authenticated user
+        const result = await client.query(
+          `SELECT w.wallet_address, w.wallet_name, w.enclave_instance_id, w.created_at
+           FROM wallets w
+           JOIN users u ON w.ethereum_address = u.ethereum_address
+           WHERE u.ethereum_address = $1
+           ORDER BY w.created_at DESC`,
+          [userAddress]
+        )
+
+        const wallets = result.rows.map((row: any) => ({
+          address: row.wallet_address,
+          name: row.wallet_name,
+          enclaveInstanceId: row.enclave_instance_id,
+          status: 'active' // TODO: Add status checking logic
+        }))
+
+        await client.end()
+        return c.json({ wallets })
+      } catch (dbError: any) {
+        console.error('Database error in wallet list:', dbError)
+        return c.json({ error: 'Failed to fetch wallets from database' }, 500)
+      }
     } catch (error: any) {
       return c.json({ error: error.message || 'Failed to fetch wallets' }, 500)
     }
@@ -1691,25 +1743,14 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
         )
       }
 
-      // Always use the actual enclave (local Docker or remote EC2)
+      // Always use the actual enclave (no mock fallback)
       console.log(`🔐 Generating keys in enclave for instance: ${instanceId}`)
 
-      try {
-        walletResult = await enclaveClient.generateWalletKeys(
-          instanceId,
-          walletName,
-          userAddress
-        )
-      } catch (error: any) {
-        // If enclave connection fails, try using mock as fallback
-        console.warn(
-          `Enclave connection failed, using mock generation: ${error.message}`
-        )
-        walletResult = await enclaveClient.mockGenerateWalletKeys(
-          walletName,
-          userAddress
-        )
-      }
+      walletResult = await enclaveClient.generateWalletKeys(
+        instanceId,
+        walletName,
+        userAddress
+      )
 
       // Store wallet and key shares in database if database URL is provided
       if (databaseUrl) {
@@ -1891,16 +1932,10 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
       )
       let signResult
 
-      try {
-        signResult = await enclaveClient.signTransaction(
-          instanceId,
-          transactionRequest
-        )
-      } catch (error: any) {
-        // If enclave connection fails, use mock as fallback
-        console.warn(`Enclave signing failed, using mock: ${error.message}`)
-        signResult = await enclaveClient.mockSignTransaction(transactionRequest)
-      }
+      signResult = await enclaveClient.signTransaction(
+        instanceId,
+        transactionRequest
+      )
 
       // Store transaction in database if database URL is provided
       if (databaseUrl && signResult.txHash) {
@@ -1950,19 +1985,6 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
         { error: error.message || 'Failed to send transaction' },
         500
       )
-    }
-  })
-
-  api.get('/wallet/:address/balance', authMiddleware, async (c) => {
-    try {
-      // const address = c.req.param('address')
-
-      // This would query blockchain for actual balance
-      const mockBalance = Math.random().toFixed(6)
-
-      return c.json({ balance: mockBalance })
-    } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to fetch balance' }, 500)
     }
   })
 

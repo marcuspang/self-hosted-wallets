@@ -6,6 +6,7 @@ export interface EnclaveConnection {
   host: string
   port: number
   isHealthy: boolean
+  deploymentStatus: 'none' | 'building' | 'running' | 'failed'
 }
 
 export interface EnclaveRequest {
@@ -64,18 +65,36 @@ export class EnclaveClient {
     instanceId: string,
     enclaveId: string,
     host: string,
-    port = 8080
+    port = 8080,
+    deploymentStatus: 'none' | 'building' | 'running' | 'failed' = 'building'
   ): void {
     const connection: EnclaveConnection = {
       instanceId,
       enclaveId,
       host,
       port,
-      isHealthy: false
+      isHealthy: false,
+      deploymentStatus
     }
 
     this.connections.set(instanceId, connection)
-    console.log(`📡 Added enclave connection for instance: ${instanceId}`)
+    console.log(`📡 Added enclave connection for instance: ${instanceId} (status: ${deploymentStatus})`)
+  }
+
+  /**
+   * Update deployment status for an enclave connection
+   */
+  updateDeploymentStatus(instanceId: string, status: 'none' | 'building' | 'running' | 'failed'): void {
+    const connection = this.connections.get(instanceId)
+    if (connection) {
+      connection.deploymentStatus = status
+      if (status === 'running') {
+        connection.isHealthy = true
+      } else if (status === 'failed') {
+        connection.isHealthy = false
+      }
+      console.log(`📡 Updated deployment status for instance ${instanceId}: ${status}`)
+    }
   }
 
   /**

@@ -12,6 +12,9 @@ import {
   Wallet
 } from 'lucide-react'
 import { useState } from 'react'
+import { useAWSInstances } from '../../hooks/useAWSInstances'
+import { getApiUrl } from '../../lib/api'
+import { databaseManager } from '../../lib/databaseManager'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -24,12 +27,10 @@ import {
 } from '../ui/card'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { getApiUrl } from '../../lib/api'
 
 interface WalletInfo {
   address: string
   name: string
-  balance: string
   enclaveInstanceId?: string
   status: 'active' | 'pending' | 'error'
 }
@@ -37,6 +38,7 @@ interface WalletInfo {
 export function WalletOperations() {
   const queryClient = useQueryClient()
   const [newWalletName, setNewWalletName] = useState('')
+  const [selectedInstanceId, setSelectedInstanceId] = useState('')
   const [selectedWallet, setSelectedWallet] = useState<string>('')
   const [sendAmount, setSendAmount] = useState('')
   const [sendToAddress, setSendToAddress] = useState('')
@@ -46,7 +48,15 @@ export function WalletOperations() {
   const { data: wallets = [] } = useQuery({
     queryKey: ['wallets'],
     queryFn: async () => {
-      const response = await fetch(getApiUrl('/api/wallet/list'), {
+      const activeConnection = databaseManager.getActiveConnection()
+      const databaseUrl = activeConnection?.url
+
+      const url = new URL(getApiUrl('/api/wallet/list'))
+      if (databaseUrl) {
+        url.searchParams.append('databaseUrl', databaseUrl)
+      }
+
+      const response = await fetch(url.toString(), {
         credentials: 'include'
       })
       if (!response.ok) {
@@ -57,6 +67,9 @@ export function WalletOperations() {
     }
   })
 
+  // Use shared AWS instances hook
+  const { hasCredentials, runningEnclaveInstances } = useAWSInstances()
+
   const generateWalletMutation = useMutation({
     mutationFn: async ({
       walletName,
@@ -65,11 +78,14 @@ export function WalletOperations() {
       walletName: string
       instanceId: string
     }) => {
+      const activeConnection = databaseManager.getActiveConnection()
+      const databaseUrl = activeConnection?.url
+
       const response = await fetch(getApiUrl('/api/wallet/generate-keys'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ walletName, instanceId })
+        body: JSON.stringify({ walletName, instanceId, databaseUrl })
       })
 
       if (!response.ok) {
@@ -83,6 +99,7 @@ export function WalletOperations() {
       }
       queryClient.invalidateQueries({ queryKey: ['wallets'] })
       setNewWalletName('')
+      setSelectedInstanceId('')
     }
   })
 
@@ -91,18 +108,30 @@ export function WalletOperations() {
       from,
       to,
       value,
-      userShare
+      userShare,
+      instanceId
     }: {
       from: string
       to: string
       value: string
       userShare?: string
+      instanceId?: string
     }) => {
+      const activeConnection = databaseManager.getActiveConnection()
+      const databaseUrl = activeConnection?.url
+
       const response = await fetch(getApiUrl('/api/wallet/send-transaction'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ from, to, value, userShare })
+        body: JSON.stringify({
+          from,
+          to,
+          value,
+          userShare,
+          instanceId,
+          databaseUrl
+        })
       })
 
       if (!response.ok) {
@@ -117,28 +146,13 @@ export function WalletOperations() {
     }
   })
 
-  const refreshBalanceMutation = useMutation({
-    mutationFn: async (walletAddress: string) => {
-      const response = await fetch(getApiUrl(`/api/wallet/${walletAddress}/balance`), {
-        credentials: 'include'
-      })
-      if (!response.ok) {
-        throw new Error('Failed to refresh balance')
-      }
-      return response.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['wallets'] })
-    }
-  })
-
   const generateWallet = () => {
-    if (!newWalletName.trim()) {
+    if (!(newWalletName.trim() && selectedInstanceId)) {
       return
     }
     generateWalletMutation.mutate({
       walletName: newWalletName,
-      instanceId: 'instance-123' // This would come from selected instance
+      instanceId: selectedInstanceId
     })
   }
 
@@ -146,20 +160,21 @@ export function WalletOperations() {
     if (!(selectedWallet && sendToAddress && sendAmount)) {
       return
     }
+
+    // Find the selected wallet to get its instanceId
+    const selectedWalletInfo = wallets.find((w) => w.address === selectedWallet)
+
     sendTransactionMutation.mutate({
       from: selectedWallet,
       to: sendToAddress,
       value: sendAmount,
-      userShare: userShare || undefined
+      userShare: userShare || undefined,
+      instanceId: selectedWalletInfo?.enclaveInstanceId
     })
   }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-  }
-
-  const refreshBalance = (walletAddress: string) => {
-    refreshBalanceMutation.mutate(walletAddress)
   }
 
   return (
@@ -192,8 +207,42 @@ export function WalletOperations() {
               value={newWalletName}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="instance-select">Enclave Instance</Label>
+            <select
+              className="w-full rounded border px-3 py-2 text-sm"
+              id="instance-select"
+              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              value={selectedInstanceId}
+            >
+              <option value="">Select enclave instance...</option>
+              {runningEnclaveInstances.map((instance) => (
+                <option key={instance.id} value={instance.id}>
+                  {instance.id} ({instance.type} - {instance.enclaveStatus})
+                </option>
+              ))}
+            </select>
+            {hasCredentials ? (
+              runningEnclaveInstances.length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  No running enclave instances available. Deploy and start an
+                  enclave in AWS Instance Management first.
+                </p>
+              ) : null
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                Configure AWS credentials to see available instances.
+              </p>
+            )}
+          </div>
+
           <Button
-            disabled={generateWalletMutation.isPending || !newWalletName.trim()}
+            disabled={
+              generateWalletMutation.isPending ||
+              !newWalletName.trim() ||
+              !selectedInstanceId
+            }
             onClick={generateWallet}
           >
             {generateWalletMutation.isPending ? (
@@ -289,20 +338,6 @@ export function WalletOperations() {
                           <Copy className="h-3 w-3" />
                         </Button>
                       </div>
-                      <div className="text-sm">
-                        Balance:{' '}
-                        <span className="font-medium">
-                          {wallet.balance} ETH
-                        </span>
-                        <Button
-                          className="ml-2 h-6 px-2"
-                          onClick={() => refreshBalance(wallet.address)}
-                          size="sm"
-                          variant="ghost"
-                        >
-                          Refresh
-                        </Button>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -337,7 +372,7 @@ export function WalletOperations() {
                   .filter((w) => w.status === 'active')
                   .map((wallet) => (
                     <option key={wallet.address} value={wallet.address}>
-                      {wallet.name} ({wallet.balance} ETH)
+                      {wallet.name}
                     </option>
                   ))}
               </select>

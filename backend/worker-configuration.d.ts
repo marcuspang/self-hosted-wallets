@@ -8,7 +8,10 @@ declare namespace Cloudflare {
 		AWS_ACCESS_KEY_ID: string;
 		AWS_SECRET_ACCESS_KEY: string;
 		AWS_REGION: string;
+		AWS_SECURITY_GROUP_ID?: string;
 		DATABASE_URL: string;
+		EC2_PRIVATE_KEY: string;
+		EC2_KEY_NAME?: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

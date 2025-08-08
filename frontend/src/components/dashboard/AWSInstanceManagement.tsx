@@ -12,6 +12,7 @@ import {
   Trash2
 } from 'lucide-react'
 import { useState } from 'react'
+import { getApiUrl } from '../../lib/api'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -29,7 +30,6 @@ import {
   SelectTrigger,
   SelectValue
 } from '../ui/select'
-import { getApiUrl } from '../../lib/api'
 
 interface Instance {
   id: string
@@ -56,7 +56,7 @@ export function AWSInstanceManagement() {
     { value: 'eu-west-1', label: 'Europe (Ireland)' }
   ]
 
-  const { data: instances = [] } = useQuery({
+  const { data: instances = [] } = useQuery<Instance[]>({
     queryKey: ['aws-instances'],
     queryFn: async () => {
       const response = await fetch(getApiUrl('/api/aws/instances'), {
@@ -67,7 +67,16 @@ export function AWSInstanceManagement() {
       }
       const data = (await response.json()) as { instances: Instance[] }
       return data.instances || []
-    }
+    },
+    // Auto-poll while instances are transitioning (e.g., pending)
+    refetchInterval: (query) => {
+      const hasTransitioning = (query.state.data || []).some((i) =>
+        ['pending', 'stopping', 'shutting-down'].includes(i.status)
+      )
+      return hasTransitioning ? 3000 : false
+    },
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true
   })
 
   const createInstanceMutation = useMutation({
@@ -211,13 +220,15 @@ export function AWSInstanceManagement() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="font-medium text-sm">Instance Type</label>
+              <label className="font-medium text-sm" htmlFor="instanceType">
+                Instance Type
+              </label>
               <Select
                 onValueChange={setSelectedInstanceType}
                 value={selectedInstanceType}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select instance type" />
                 </SelectTrigger>
                 <SelectContent>
                   {instanceTypes.map((type) => (
@@ -229,10 +240,12 @@ export function AWSInstanceManagement() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="font-medium text-sm">Region</label>
+              <label className="font-medium text-sm" htmlFor="region">
+                Region
+              </label>
               <Select onValueChange={setSelectedRegion} value={selectedRegion}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select region" />
                 </SelectTrigger>
                 <SelectContent>
                   {regions.map((region) => (
@@ -330,16 +343,18 @@ export function AWSInstanceManagement() {
                           Start
                         </Button>
                       )}
-                      <Button
-                        onClick={() =>
-                          controlInstance(instance.id, 'terminate')
-                        }
-                        size="sm"
-                        variant="destructive"
-                      >
-                        <Trash2 className="mr-2 h-3 w-3" />
-                        Terminate
-                      </Button>
+                      {instance.status === 'running' && (
+                        <Button
+                          onClick={() =>
+                            controlInstance(instance.id, 'terminate')
+                          }
+                          size="sm"
+                          variant="destructive"
+                        >
+                          <Trash2 className="mr-2 h-3 w-3" />
+                          Terminate
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -1,0 +1,22 @@
+{
+  "name": "nitro-enclave-wallet",
+  "version": "1.0.0",
+  "description": "Nitro Enclave application for secure key generation and transaction signing",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@privy-io/shamir-secret-sharing": "^0.0.7",
+    "ethers": "^6.0.0",
+    "fastify": "^4.0.0",
+    "sodium-native": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0"
+  }
+}

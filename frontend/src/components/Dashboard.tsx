@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useQueryState } from 'nuqs'
 import { useAccount, useDisconnect } from 'wagmi'
-import { AWSInstanceManagement } from './dashboard/AWSInstanceManagement'
+import { SecureAWSIntegration } from './dashboard/SecureAWSIntegration'
 import { DatabaseSetup } from './dashboard/DatabaseSetup'
 import { PolicyConfiguration } from './dashboard/PolicyConfiguration'
 import { TransactionHistory } from './dashboard/TransactionHistory'
@@ -100,7 +100,7 @@ export function Dashboard() {
                   variant={activeTab === 'aws' ? 'secondary' : 'ghost'}
                 >
                   <Cloud className="mr-2 h-4 w-4" />
-                  AWS Instances
+                  AWS Operations
                 </Button>
                 <Button
                   className="w-full justify-start"
@@ -207,6 +207,12 @@ export function Dashboard() {
                     <div className="flex items-center space-x-2">
                       <Clock className="h-4 w-4 text-yellow-600" />
                       <span className="text-sm">
+                        Configure secure AWS credentials with KMS encryption
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 text-yellow-600" />
+                      <span className="text-sm">
                         Launch AWS EC2 instance for Nitro Enclaves
                       </span>
                     </div>
@@ -229,7 +235,7 @@ export function Dashboard() {
           )}
 
           {activeTab === 'database' && <DatabaseSetup />}
-          {activeTab === 'aws' && <AWSInstanceManagement />}
+          {activeTab === 'aws' && <SecureAWSIntegration />}
           {activeTab === 'wallet' && <WalletOperations />}
           {activeTab === 'policies' && <PolicyConfiguration />}
           {activeTab === 'transactions' && <TransactionHistory />}

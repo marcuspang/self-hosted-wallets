@@ -466,7 +466,9 @@ app.use(
         return origin
       }
       return ''
-    }
+    },
+    credentials: true,
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
   })
 )
 

@@ -23,8 +23,8 @@ import { generateSiweNonce, parseSiweMessage } from 'viem/siwe'
 import { enclaveClient } from './enclaveClient.js'
 import {
   type AWSCredentials,
-  getKMSCredentialManager
-} from './services/kmsCredentialManager.js'
+  CredentialManager
+} from './services/credentialManager.js'
 import 'dotenv/config'
 import { cors } from 'hono/cors'
 
@@ -488,28 +488,25 @@ function createAPIRoutes() {
     return Porto.create()
   }
 
-  // Helper function to get AWS EC2 client
-  const getEC2Client = async (c: Context, credentials?: AWSCredentials) => {
-    let awsCredentials = credentials ?? null
+  // Helper function to get AWS EC2 client with decrypted credentials
+  const getEC2Client = (credentials: AWSCredentials): EC2Client => {
+    return CredentialManager.createEC2Client(credentials)
+  }
 
-    if (!awsCredentials) {
-      const kmsManager = getKMSCredentialManager()
-      awsCredentials = await kmsManager.getCredentials()
+  // Helper function to extract credentials from request
+  const getCredentialsFromRequest = async (
+    c: Context
+  ): Promise<AWSCredentials> => {
+    const { encryptedCredentials, encryptionKey } = await c.req.json()
 
-      if (!awsCredentials) {
-        throw new Error(
-          'No AWS credentials found. Please configure credentials first.'
-        )
-      }
+    if (!(encryptedCredentials && encryptionKey)) {
+      throw new Error('Encrypted credentials and encryption key are required')
     }
 
-    return new EC2Client({
-      region: awsCredentials.region || 'us-east-1',
-      credentials: {
-        accessKeyId: awsCredentials.accessKeyId,
-        secretAccessKey: awsCredentials.secretAccessKey
-      }
-    })
+    return CredentialManager.decryptCredentials(
+      encryptedCredentials,
+      encryptionKey
+    )
   }
 
   // Amazon Linux 2 AMI map for Nitro Enclave support
@@ -860,20 +857,24 @@ function createAPIRoutes() {
         ec2PrivateKey
       }
 
-      const kmsManager = getKMSCredentialManager()
-
       // Validate credentials first
-      const isValid = await kmsManager.validateCredentials(credentials)
+      const isValid = await CredentialManager.validateCredentials(credentials)
       if (!isValid) {
         return c.json({ error: 'Invalid AWS credentials' }, 400)
       }
 
-      // Store credentials in KMS
-      await kmsManager.storeCredentials(credentials)
+      // Generate encryption key for client-side storage
+      const encryptionKey = CredentialManager.generateEncryptionKey()
+      const encryptedCredentials = CredentialManager.encryptCredentials(
+        credentials,
+        encryptionKey
+      )
 
       return c.json({
         success: true,
-        message: 'AWS credentials stored securely'
+        message: 'AWS credentials validated successfully',
+        encryptionKey,
+        encryptedCredentials
       })
     } catch (error: any) {
       return c.json(
@@ -883,43 +884,88 @@ function createAPIRoutes() {
     }
   })
 
-  api.get('/aws/credentials/status', authMiddleware, async (c) => {
+  api.post('/aws/credentials/validate', authMiddleware, async (c) => {
     try {
-      const kmsManager = getKMSCredentialManager()
-      const credentials = await kmsManager.getCredentials()
+      const { encryptedCredentials, encryptionKey } = await c.req.json()
+
+      if (!(encryptedCredentials && encryptionKey)) {
+        return c.json(
+          { error: 'Encrypted credentials and encryption key are required' },
+          400
+        )
+      }
+
+      // Decrypt and validate credentials
+      const credentials = CredentialManager.decryptCredentials(
+        encryptedCredentials,
+        encryptionKey
+      )
+      const isValid = await CredentialManager.validateCredentials(credentials)
 
       return c.json({
-        configured: !!credentials,
-        region: credentials?.region || null,
-        hasSecurityGroup: !!credentials?.securityGroupId,
-        hasEC2Key: !!credentials?.ec2KeyName
+        valid: isValid,
+        configured: true,
+        region: credentials.region,
+        hasSecurityGroup: !!credentials.securityGroupId,
+        hasEC2Key: !!credentials.ec2KeyName
       })
     } catch (error: any) {
       return c.json(
-        { error: error.message || 'Failed to check credential status' },
+        { error: error.message || 'Failed to validate credentials' },
         500
       )
     }
   })
 
-  api.delete('/aws/credentials', authMiddleware, async (c) => {
+  api.post('/aws/credentials/decrypt', authMiddleware, async (c) => {
     try {
-      const kmsManager = getKMSCredentialManager()
-      await kmsManager.clearCredentials()
+      const { encryptedCredentials, encryptionKey } = await c.req.json()
 
-      return c.json({ success: true, message: 'AWS credentials cleared' })
+      if (!(encryptedCredentials && encryptionKey)) {
+        return c.json(
+          { error: 'Encrypted credentials and encryption key are required' },
+          400
+        )
+      }
+
+      // Decrypt credentials for server-side operations
+      const credentials = CredentialManager.decryptCredentials(
+        encryptedCredentials,
+        encryptionKey
+      )
+
+      // Don't return the actual credentials, just confirm decryption was successful
+      return c.json({
+        success: true,
+        region: credentials.region,
+        hasSecurityGroup: !!credentials.securityGroupId,
+        hasEC2Key: !!credentials.ec2KeyName
+      })
     } catch (error: any) {
       return c.json(
-        { error: error.message || 'Failed to clear credentials' },
+        { error: error.message || 'Failed to decrypt credentials' },
         500
       )
     }
   })
 
   // AWS Instance Management Routes
-  api.get('/aws/instances', authMiddleware, async (c) => {
+  api.post('/aws/instances/list', authMiddleware, async (c) => {
     try {
-      const ec2 = await getEC2Client(c)
+      const { encryptedCredentials, encryptionKey } = await c.req.json()
+
+      if (!(encryptedCredentials && encryptionKey)) {
+        return c.json(
+          { error: 'Encrypted credentials and encryption key are required' },
+          400
+        )
+      }
+
+      const credentials = CredentialManager.decryptCredentials(
+        encryptedCredentials,
+        encryptionKey
+      )
+      const ec2 = getEC2Client(credentials)
       const command = new DescribeInstancesCommand({})
       const response = await ec2.send(command)
 
@@ -930,7 +976,7 @@ function createAPIRoutes() {
               id: instance.InstanceId,
               status: instance.State?.Name,
               type: instance.InstanceType,
-              region: 'us-east-1', // Default region
+              region: credentials.region,
               enclaveStatus: 'none' // This would be determined by checking enclave status
             })) || []
         ) || []
@@ -946,22 +992,26 @@ function createAPIRoutes() {
 
   api.post('/aws/instances', authMiddleware, async (c) => {
     try {
-      const { instanceType, region, securityGroupId, subnetId } =
-        await c.req.json()
+      const {
+        instanceType,
+        region,
+        securityGroupId,
+        subnetId,
+        encryptedCredentials,
+        encryptionKey
+      } = await c.req.json()
 
-      const kmsManager = getKMSCredentialManager()
-      const credentials = await kmsManager.getCredentials()
-
-      if (!credentials) {
+      if (!(encryptedCredentials && encryptionKey)) {
         return c.json(
-          {
-            error:
-              'AWS credentials not configured. Please set up credentials first.'
-          },
+          { error: 'Encrypted credentials and encryption key are required' },
           400
         )
       }
 
+      const credentials = CredentialManager.decryptCredentials(
+        encryptedCredentials,
+        encryptionKey
+      )
       const keyName = credentials.ec2KeyName
 
       // Validate instance type supports Nitro Enclaves
@@ -975,7 +1025,7 @@ function createAPIRoutes() {
       }
 
       const selectedRegion: string = region || credentials.region || 'us-east-1'
-      const ec2 = await getEC2Client(c, credentials)
+      const ec2 = getEC2Client(credentials)
 
       const imageId =
         AMAZON_LINUX_2_AMI_BY_REGION[selectedRegion] ||
@@ -1090,7 +1140,8 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
   api.post('/aws/instances/:id/start', authMiddleware, async (c) => {
     try {
       const instanceId = c.req.param('id')
-      const ec2 = await getEC2Client(c)
+      const credentials = await getCredentialsFromRequest(c)
+      const ec2 = getEC2Client(credentials)
       const command = new StartInstancesCommand({ InstanceIds: [instanceId] })
       await ec2.send(command)
 
@@ -1103,7 +1154,8 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
   api.post('/aws/instances/:id/stop', authMiddleware, async (c) => {
     try {
       const instanceId = c.req.param('id')
-      const ec2 = await getEC2Client(c)
+      const credentials = await getCredentialsFromRequest(c)
+      const ec2 = getEC2Client(credentials)
       const command = new StopInstancesCommand({ InstanceIds: [instanceId] })
       await ec2.send(command)
 
@@ -1116,7 +1168,8 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
   api.delete('/aws/instances/:id', authMiddleware, async (c) => {
     try {
       const instanceId = c.req.param('id')
-      const ec2 = await getEC2Client(c)
+      const credentials = await getCredentialsFromRequest(c)
+      const ec2 = getEC2Client(credentials)
       const command = new TerminateInstancesCommand({
         InstanceIds: [instanceId]
       })
@@ -1134,28 +1187,28 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
   // Enclave Routes
   api.post('/aws/enclaves/build', authMiddleware, async (c) => {
     try {
-      const { instanceId } = await c.req.json()
+      const { instanceId, encryptedCredentials, encryptionKey } =
+        await c.req.json()
 
       if (!instanceId) {
         return c.json({ error: 'Instance ID is required' }, 400)
+      }
+
+      if (!(encryptedCredentials && encryptionKey)) {
+        return c.json(
+          { error: 'Encrypted credentials and encryption key are required' },
+          400
+        )
       }
 
       console.log(
         `🔐 Building and deploying Nitro Enclave for instance: ${instanceId}`
       )
 
-      const kmsManager = getKMSCredentialManager()
-      const credentials = await kmsManager.getCredentials()
-
-      if (!credentials) {
-        return c.json(
-          {
-            error:
-              'AWS credentials not configured. Please set up credentials first.'
-          },
-          400
-        )
-      }
+      const credentials = CredentialManager.decryptCredentials(
+        encryptedCredentials,
+        encryptionKey
+      )
 
       // First, transfer the enclave source code to the EC2 instance
       await transferEnclaveFiles(instanceId, credentials)

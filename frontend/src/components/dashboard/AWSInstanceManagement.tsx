@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CheckCircle,
   Cloud,
+  Key,
   Loader2,
   Play,
   Plus,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { getApiUrl } from '../../lib/api'
+import { CredentialManager } from '../../lib/credentialManager'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -56,18 +58,32 @@ export function AWSInstanceManagement() {
     { value: 'eu-west-1', label: 'Europe (Ireland)' }
   ]
 
-  const { data: instances = [] } = useQuery<Instance[]>({
+  // Check if credentials are available
+  const hasCredentials = CredentialManager.hasValidCredentials()
+
+  const { data: instances = [], error: instancesError } = useQuery<Instance[]>({
     queryKey: ['aws-instances'],
     queryFn: async () => {
-      const response = await fetch(getApiUrl('/api/aws/instances'), {
-        credentials: 'include'
+      if (!hasCredentials) {
+        throw new Error('No AWS credentials configured')
+      }
+
+      const requestBody = CredentialManager.createRequestWithCredentials()
+
+      const response = await fetch(getApiUrl('/api/aws/instances/list'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(requestBody)
       })
+
       if (!response.ok) {
         throw new Error('Failed to fetch instances')
       }
       const data = (await response.json()) as { instances: Instance[] }
       return data.instances || []
     },
+    enabled: hasCredentials,
     // Auto-poll while instances are transitioning (e.g., pending)
     refetchInterval: (query) => {
       const hasTransitioning = (query.state.data || []).some((i) =>
@@ -87,11 +103,16 @@ export function AWSInstanceManagement() {
       instanceType: string
       region: string
     }) => {
+      const requestBody = CredentialManager.createRequestWithCredentials({
+        instanceType,
+        region
+      })
+
       const response = await fetch(getApiUrl('/api/aws/instances'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ instanceType, region })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -118,9 +139,13 @@ export function AWSInstanceManagement() {
           : `/api/aws/instances/${instanceId}/${action}`
       const method = action === 'terminate' ? 'DELETE' : 'POST'
 
+      const requestBody = CredentialManager.createRequestWithCredentials()
+
       const response = await fetch(getApiUrl(endpoint), {
         method,
-        credentials: 'include'
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -135,11 +160,15 @@ export function AWSInstanceManagement() {
 
   const deployEnclaveMutation = useMutation({
     mutationFn: async (instanceId: string) => {
+      const requestBody = CredentialManager.createRequestWithCredentials({
+        instanceId
+      })
+
       const response = await fetch(getApiUrl('/api/aws/enclaves/build'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ instanceId })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -153,6 +182,9 @@ export function AWSInstanceManagement() {
   })
 
   const createInstance = () => {
+    if (!hasCredentials) {
+      return
+    }
     createInstanceMutation.mutate({
       instanceType: selectedInstanceType,
       region: selectedRegion
@@ -163,10 +195,16 @@ export function AWSInstanceManagement() {
     instanceId: string,
     action: 'start' | 'stop' | 'terminate'
   ) => {
+    if (!hasCredentials) {
+      return
+    }
     controlInstanceMutation.mutate({ instanceId, action })
   }
 
   const deployEnclave = (instanceId: string) => {
+    if (!hasCredentials) {
+      return
+    }
     deployEnclaveMutation.mutate(instanceId)
   }
 
@@ -196,6 +234,73 @@ export function AWSInstanceManagement() {
       default:
         return <Shield className="h-4 w-4 text-gray-400" />
     }
+  }
+
+  // Show credential requirement message if no credentials
+  if (!hasCredentials) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h3 className="font-medium text-lg">AWS Instance Management</h3>
+          <p className="text-muted-foreground text-sm">
+            Launch and manage EC2 instances for Nitro Enclaves
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Key className="h-5 w-5 text-yellow-600" />
+              <span>AWS Credentials Required</span>
+            </CardTitle>
+            <CardDescription>
+              You need to configure AWS credentials before managing instances
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Please configure your AWS credentials in the AWS Credential
+                Setup section above.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Show error if instances failed to load
+  if (instancesError) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h3 className="font-medium text-lg">AWS Instance Management</h3>
+          <p className="text-muted-foreground text-sm">
+            Launch and manage EC2 instances for Nitro Enclaves
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              <span>Failed to Load Instances</span>
+            </CardTitle>
+            <CardDescription>
+              There was an error loading your AWS instances
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{instancesError.message}</AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

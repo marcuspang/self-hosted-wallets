@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
+  Clock,
   Cloud,
   Database,
   Key,
@@ -11,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { getApiUrl } from '../../lib/api'
-import { credentialManager } from '../../lib/credentialManager'
+import { CredentialManager } from '../../lib/credentialManager'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import {
@@ -25,9 +26,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
 import { AWSCredentialSetup } from './AWSCredentialSetup'
 import { AWSInstanceManagement } from './AWSInstanceManagement'
 
-interface CredentialStatus {
+interface ValidationResponse {
+  valid: boolean
   configured: boolean
-  region: string | null
+  region: string
   hasSecurityGroup: boolean
   hasEC2Key: boolean
 }
@@ -39,53 +41,86 @@ interface OperationStats {
   totalWallets: number
 }
 
+interface Instance {
+  id: string
+  status: 'pending' | 'running' | 'stopped' | 'terminated'
+  type: string
+  region: string
+  enclaveStatus?: 'none' | 'building' | 'running' | 'failed'
+}
+
+interface Wallet {
+  id: string
+  name: string
+  address: string
+  createdAt: string
+}
+
 export function AWSOperationCenter() {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('overview')
 
-  const { data: serverCredentialStatus } = useQuery<CredentialStatus>({
-    queryKey: ['aws-credentials-status'],
-    queryFn: async () => {
-      const response = await fetch(getApiUrl('/api/aws/credentials/status'), {
-        credentials: 'include'
-      })
-      if (!response.ok) {
-        throw new Error('Failed to fetch credential status')
-      }
-      const data = await response.json()
+  // Check if credentials are available
+  const credentialStatus = CredentialManager.getCredentialStatus()
+  const hasCredentials = credentialStatus.configured
 
-      // Cache metadata locally
-      if (data.configured) {
-        credentialManager.setCachedMetadata({
-          region: data.region,
-          hasSecurityGroup: data.hasSecurityGroup,
-          hasEC2Key: data.hasEC2Key
-        })
-      }
+  // Validate stored credentials with server
+  const { data: validationResult, isLoading: isValidating } =
+    useQuery<ValidationResponse>({
+      queryKey: ['aws-credentials-validation'],
+      queryFn: async () => {
+        const credentialsForRequest =
+          CredentialManager.getCredentialsForRequest()
+        if (!credentialsForRequest) {
+          throw new Error('No credentials available')
+        }
 
-      return data
-    },
-    refetchInterval: 30_000 // Refetch every 30 seconds
-  })
+        const response = await fetch(
+          getApiUrl('/api/aws/credentials/validate'),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(credentialsForRequest)
+          }
+        )
 
+        if (!response.ok) {
+          throw new Error('Failed to validate credentials')
+        }
+        return response.json()
+      },
+      enabled: hasCredentials,
+      retry: false,
+      refetchInterval: 5 * 60 * 1000 // Revalidate every 5 minutes
+    })
+
+  // Fetch instances if credentials are valid
   const { data: instances = [] } = useQuery({
     queryKey: ['aws-instances'],
     queryFn: async () => {
-      const response = await fetch(getApiUrl('/api/aws/instances'), {
-        credentials: 'include'
-      })
-      if (!response.ok) {
-        if (response.status === 400) {
-          // Credentials not configured
-          return []
+      try {
+        const requestBody = CredentialManager.createRequestWithCredentials()
+
+        const response = await fetch(getApiUrl('/api/aws/instances/list'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(requestBody)
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch instances')
         }
-        throw new Error('Failed to fetch instances')
+        const data = (await response.json()) as { instances: Instance[] }
+        return data.instances
+      } catch (error) {
+        console.error('Failed to fetch instances:', error)
+        return []
       }
-      const data = await response.json()
-      return data.instances || []
     },
-    enabled: serverCredentialStatus?.configured,
-    refetchInterval: 10_000 // Refetch every 10 seconds when credentials are configured
+    enabled: hasCredentials && validationResult?.valid,
+    refetchInterval: 10_000 // Refetch every 10 seconds when credentials are valid
   })
 
   const { data: wallets = [] } = useQuery({
@@ -97,32 +132,42 @@ export function AWSOperationCenter() {
       if (!response.ok) {
         throw new Error('Failed to fetch wallets')
       }
-      const data = await response.json()
-      return data.wallets || []
+      const data = (await response.json()) as { wallets: Wallet[] }
+      return data.wallets
     }
   })
 
   const validateConnectionMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(getApiUrl('/api/aws/credentials/status'), {
-        credentials: 'include'
+      const credentialsForRequest = CredentialManager.getCredentialsForRequest()
+      if (!credentialsForRequest) {
+        throw new Error('No credentials available')
+      }
+
+      const response = await fetch(getApiUrl('/api/aws/credentials/validate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(credentialsForRequest)
       })
+
       if (!response.ok) {
         throw new Error('Connection validation failed')
       }
       return response.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['aws-credentials-status'] })
+      queryClient.invalidateQueries({
+        queryKey: ['aws-credentials-validation']
+      })
       queryClient.invalidateQueries({ queryKey: ['aws-instances'] })
     }
   })
 
   const operationStats: OperationStats = {
     totalInstances: instances.length,
-    runningInstances: instances.filter((i: any) => i.status === 'running')
-      .length,
-    activeEnclaves: instances.filter((i: any) => i.enclaveStatus === 'running')
+    runningInstances: instances.filter((i) => i.status === 'running').length,
+    activeEnclaves: instances.filter((i) => i.enclaveStatus === 'running')
       .length,
     totalWallets: wallets.length
   }
@@ -131,7 +176,11 @@ export function AWSOperationCenter() {
     validateConnectionMutation.mutate()
   }
 
-  if (!serverCredentialStatus?.configured) {
+  // Show credential setup if no credentials or invalid
+  if (
+    !hasCredentials ||
+    (hasCredentials && validationResult && !validationResult.valid)
+  ) {
     return (
       <div className="space-y-6">
         <div>
@@ -144,8 +193,9 @@ export function AWSOperationCenter() {
         <Alert>
           <Key className="h-4 w-4" />
           <AlertDescription>
-            AWS credentials are not configured. Please set up your credentials
-            to begin managing EC2 instances and Nitro Enclaves.
+            {hasCredentials
+              ? 'Your stored AWS credentials appear to be invalid or expired. Please reconfigure your credentials.'
+              : 'AWS credentials are not configured. Please set up your credentials to begin managing EC2 instances and Nitro Enclaves.'}
           </AlertDescription>
         </Alert>
 
@@ -154,19 +204,45 @@ export function AWSOperationCenter() {
     )
   }
 
+  // Show loading state while validating
+  if (hasCredentials && isValidating) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="font-medium text-2xl">AWS Operations Center</h2>
+          <p className="text-muted-foreground">Validating AWS credentials...</p>
+        </div>
+
+        <Card>
+          <CardContent className="flex items-center justify-center p-8">
+            <div className="flex items-center space-x-3">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              <span className="text-lg">Validating credentials...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Show main operations center if credentials are valid
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-medium text-2xl">AWS Operations Center</h2>
           <p className="text-muted-foreground">
-            Manage AWS infrastructure with KMS-encrypted credentials
+            Manage AWS infrastructure with encrypted credentials
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 text-muted-foreground text-sm">
+            <Clock className="h-4 w-4 text-blue-600" />
+            <span>{credentialStatus.hoursUntilExpiry}h remaining</span>
+          </div>
           <div className="flex items-center space-x-2 text-muted-foreground text-sm">
             <Shield className="h-4 w-4 text-green-600" />
-            <span>Region: {serverCredentialStatus.region}</span>
+            <span>Region: {validationResult?.region}</span>
           </div>
           <Button
             disabled={validateConnectionMutation.isPending}
@@ -269,7 +345,7 @@ export function AWSOperationCenter() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">KMS Encryption</span>
+                  <span className="text-sm">AES-256 Encryption</span>
                   <div className="flex items-center space-x-1 text-green-600">
                     <Shield className="h-4 w-4" />
                     <span className="text-sm">Active</span>
@@ -278,7 +354,7 @@ export function AWSOperationCenter() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Security Group</span>
                   <div className="flex items-center space-x-1">
-                    {serverCredentialStatus.hasSecurityGroup ? (
+                    {validationResult?.hasSecurityGroup ? (
                       <>
                         <Shield className="h-4 w-4 text-green-600" />
                         <span className="text-green-600 text-sm">
@@ -296,7 +372,7 @@ export function AWSOperationCenter() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm">SSH Key</span>
                   <div className="flex items-center space-x-1">
-                    {serverCredentialStatus.hasEC2Key ? (
+                    {validationResult?.hasEC2Key ? (
                       <>
                         <Key className="h-4 w-4 text-green-600" />
                         <span className="text-green-600 text-sm">
@@ -311,6 +387,15 @@ export function AWSOperationCenter() {
                         </span>
                       </>
                     )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Credential Expiry</span>
+                  <div className="flex items-center space-x-1">
+                    <Clock className="h-4 w-4 text-blue-600" />
+                    <span className="text-blue-600 text-sm">
+                      {credentialStatus.hoursUntilExpiry}h remaining
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -364,7 +449,7 @@ export function AWSOperationCenter() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {instances.slice(0, 3).map((instance: any) => (
+                  {instances.slice(0, 3).map((instance) => (
                     <div
                       className="flex items-center justify-between rounded border p-2"
                       key={instance.id}

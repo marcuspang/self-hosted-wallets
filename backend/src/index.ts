@@ -22,7 +22,10 @@ import { createClient } from 'redis'
 import { hashMessage } from 'viem'
 import { generateSiweNonce, parseSiweMessage } from 'viem/siwe'
 import { enclaveClient } from './enclaveClient'
-import { getKMSCredentialManager, type AWSCredentials } from './services/kmsCredentialManager'
+import {
+  type AWSCredentials,
+  getKMSCredentialManager
+} from './services/kmsCredentialManager'
 import 'dotenv/config'
 
 export interface Bindings extends HttpBindings {
@@ -90,7 +93,7 @@ async function executeSSHCommands(
   instanceIP: string,
   commands: string[],
   credentials: AWSCredentials
-): Promise<{ success: boolean; output?: string; error?: string }> {
+) {
   const ssh = new NodeSSH()
 
   try {
@@ -127,7 +130,7 @@ async function executeSSHCommands(
       )
 
       try {
-        const result = await ssh.execCommand(command, {
+        const result = await ssh.execCommand(command!, {
           cwd: '/home/ec2-user',
           execOptions: { pty: true }
         })
@@ -479,17 +482,19 @@ function createAPIRoutes() {
 
   // Helper function to get AWS EC2 client
   const getEC2Client = async (c: Context, credentials?: AWSCredentials) => {
-    let awsCredentials = credentials
-    
+    let awsCredentials = credentials ?? null
+
     if (!awsCredentials) {
       const kmsManager = getKMSCredentialManager()
       awsCredentials = await kmsManager.getCredentials()
-      
+
       if (!awsCredentials) {
-        throw new Error('No AWS credentials found. Please configure credentials first.')
+        throw new Error(
+          'No AWS credentials found. Please configure credentials first.'
+        )
       }
     }
-    
+
     return new EC2Client({
       region: awsCredentials.region || 'us-east-1',
       credentials: {
@@ -818,12 +823,25 @@ function createAPIRoutes() {
   // AWS Credential Management Routes
   api.post('/aws/credentials/setup', authMiddleware, async (c) => {
     try {
-      const { accessKeyId, secretAccessKey, region, securityGroupId, subnetId, ec2KeyName, ec2PrivateKey } = await c.req.json()
-      
-      if (!accessKeyId || !secretAccessKey || !region) {
-        return c.json({ error: 'Access Key ID, Secret Access Key, and Region are required' }, 400)
+      const {
+        accessKeyId,
+        secretAccessKey,
+        region,
+        securityGroupId,
+        subnetId,
+        ec2KeyName,
+        ec2PrivateKey
+      } = await c.req.json()
+
+      if (!(accessKeyId && secretAccessKey && region)) {
+        return c.json(
+          {
+            error: 'Access Key ID, Secret Access Key, and Region are required'
+          },
+          400
+        )
       }
-      
+
       const credentials: AWSCredentials = {
         accessKeyId,
         secretAccessKey,
@@ -833,21 +851,27 @@ function createAPIRoutes() {
         ec2KeyName,
         ec2PrivateKey
       }
-      
+
       const kmsManager = getKMSCredentialManager()
-      
+
       // Validate credentials first
       const isValid = await kmsManager.validateCredentials(credentials)
       if (!isValid) {
         return c.json({ error: 'Invalid AWS credentials' }, 400)
       }
-      
+
       // Store credentials in KMS
       await kmsManager.storeCredentials(credentials)
-      
-      return c.json({ success: true, message: 'AWS credentials stored securely' })
+
+      return c.json({
+        success: true,
+        message: 'AWS credentials stored securely'
+      })
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to setup credentials' }, 500)
+      return c.json(
+        { error: error.message || 'Failed to setup credentials' },
+        500
+      )
     }
   })
 
@@ -855,15 +879,18 @@ function createAPIRoutes() {
     try {
       const kmsManager = getKMSCredentialManager()
       const credentials = await kmsManager.getCredentials()
-      
-      return c.json({ 
+
+      return c.json({
         configured: !!credentials,
         region: credentials?.region || null,
         hasSecurityGroup: !!credentials?.securityGroupId,
         hasEC2Key: !!credentials?.ec2KeyName
       })
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to check credential status' }, 500)
+      return c.json(
+        { error: error.message || 'Failed to check credential status' },
+        500
+      )
     }
   })
 
@@ -871,10 +898,13 @@ function createAPIRoutes() {
     try {
       const kmsManager = getKMSCredentialManager()
       await kmsManager.clearCredentials()
-      
+
       return c.json({ success: true, message: 'AWS credentials cleared' })
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to clear credentials' }, 500)
+      return c.json(
+        { error: error.message || 'Failed to clear credentials' },
+        500
+      )
     }
   })
 
@@ -910,14 +940,20 @@ function createAPIRoutes() {
     try {
       const { instanceType, region, securityGroupId, subnetId } =
         await c.req.json()
-      
+
       const kmsManager = getKMSCredentialManager()
       const credentials = await kmsManager.getCredentials()
-      
+
       if (!credentials) {
-        return c.json({ error: 'AWS credentials not configured. Please set up credentials first.' }, 400)
+        return c.json(
+          {
+            error:
+              'AWS credentials not configured. Please set up credentials first.'
+          },
+          400
+        )
       }
-      
+
       const keyName = credentials.ec2KeyName
 
       // Validate instance type supports Nitro Enclaves
@@ -995,9 +1031,7 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
         ...(subnetId ? { SubnetId: subnetId } : {}),
         ...(securityGroupId || credentials.securityGroupId
           ? {
-              SecurityGroupIds: [
-                securityGroupId || credentials.securityGroupId
-              ]
+              SecurityGroupIds: [securityGroupId || credentials.securityGroupId]
             }
           : {}),
         UserData: Buffer.from(userData).toString('base64'),
@@ -1104,16 +1138,25 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
 
       const kmsManager = getKMSCredentialManager()
       const credentials = await kmsManager.getCredentials()
-      
+
       if (!credentials) {
-        return c.json({ error: 'AWS credentials not configured. Please set up credentials first.' }, 400)
+        return c.json(
+          {
+            error:
+              'AWS credentials not configured. Please set up credentials first.'
+          },
+          400
+        )
       }
 
       // First, transfer the enclave source code to the EC2 instance
       await transferEnclaveFiles(instanceId, credentials)
 
       // Deploy using actual Nitro CLI on the EC2 instance
-      const deploymentResult = await deployEnclaveToNitroEC2(instanceId, credentials)
+      const deploymentResult = await deployEnclaveToNitroEC2(
+        instanceId,
+        credentials
+      )
 
       if (!deploymentResult.success) {
         throw new Error(
@@ -1256,7 +1299,7 @@ echo "Nitro Enclave instance setup completed at $(date)" >> /var/log/enclave-set
           walletName,
           userAddress
         )
-      } catch (error) {
+      } catch (error: any) {
         // If enclave connection fails, try using mock as fallback
         console.warn(
           `Enclave connection failed, using mock generation: ${error.message}`

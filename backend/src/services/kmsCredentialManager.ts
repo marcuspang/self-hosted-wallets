@@ -56,7 +56,9 @@ export class KMSCredentialManager {
     } catch (error: any) {
       console.error('Error creating KMS key:', error)
       if (error.name === 'AccessDeniedException') {
-        throw new Error('AWS credentials do not have permission to create KMS keys. Please provide a KMS key ID in the KMS_KEY_ID environment variable, or grant kms:CreateKey permission to your AWS user.')
+        throw new Error(
+          'AWS credentials do not have permission to create KMS keys. Please provide a KMS key ID in the KMS_KEY_ID environment variable, or grant kms:CreateKey permission to your AWS user.'
+        )
       }
       throw new Error(`Failed to create KMS key: ${error.message}`)
     }
@@ -85,7 +87,9 @@ export class KMSCredentialManager {
     } catch (error: any) {
       console.error('Error encrypting credential:', error)
       if (error.name === 'AccessDeniedException') {
-        throw new Error('AWS credentials do not have permission to encrypt with KMS. Please grant kms:Encrypt permission to your AWS user.')
+        throw new Error(
+          'AWS credentials do not have permission to encrypt with KMS. Please grant kms:Encrypt permission to your AWS user.'
+        )
       }
       throw new Error(`Failed to encrypt credential: ${error.message}`)
     }
@@ -134,23 +138,11 @@ export class KMSCredentialManager {
         credentials: encryptedCredentials
       }
 
-      // Store in local storage (browser) or file system (server)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(
-          'aws_credentials_kms',
-          JSON.stringify(dataToStore)
-        )
-      } else {
-        // For server-side, store in a secure location
-        const credentialsPath = join(
-          process.cwd(),
-          '.aws-credentials-encrypted.json'
-        )
-        writeFileSync(
-          credentialsPath,
-          JSON.stringify(dataToStore, null, 2)
-        )
-      }
+      const credentialsPath = join(
+        process.cwd(),
+        '.aws-credentials-encrypted.json'
+      )
+      writeFileSync(credentialsPath, JSON.stringify(dataToStore, null, 2))
     } catch (error) {
       console.error('Error storing credentials:', error)
       throw error
@@ -159,30 +151,24 @@ export class KMSCredentialManager {
 
   async getCredentials(): Promise<AWSCredentials | null> {
     try {
-      let storedData: { kmsKeyId?: string; credentials?: CredentialStore } | CredentialStore = {}
+      let storedData:
+        | { kmsKeyId?: string; credentials?: CredentialStore }
+        | CredentialStore = {}
 
-      // Load from local storage or file system
-      if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('aws_credentials_kms')
-        if (stored) {
-          storedData = JSON.parse(stored)
-        }
-      } else {
-        try {
-          const credentialsPath = join(
-            process.cwd(),
-            '.aws-credentials-encrypted.json'
-          )
-          const fileContent = readFileSync(credentialsPath, 'utf-8')
-          storedData = JSON.parse(fileContent)
-        } catch {
-          // File doesn't exist, return null
-          return null
-        }
+      try {
+        const credentialsPath = join(
+          process.cwd(),
+          '.aws-credentials-encrypted.json'
+        )
+        const fileContent = readFileSync(credentialsPath, 'utf-8')
+        storedData = JSON.parse(fileContent)
+      } catch {
+        // File doesn't exist, return null
+        return null
       }
 
       // Handle both old format (direct credentials) and new format (with kmsKeyId)
-      let encryptedCredentials: CredentialStore
+      let encryptedCredentials: CredentialStore | string
       if ('kmsKeyId' in storedData && 'credentials' in storedData) {
         // New format with KMS key ID
         this.keyId = storedData.kmsKeyId || this.keyId
@@ -216,18 +202,14 @@ export class KMSCredentialManager {
     try {
       this.credentialStore = {}
 
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('aws_credentials_kms')
-      } else {
-        try {
-          const credentialsPath = join(
-            process.cwd(),
-            '.aws-credentials-encrypted.json'
-          )
-          unlinkSync(credentialsPath)
-        } catch {
-          // File doesn't exist, ignore
-        }
+      try {
+        const credentialsPath = join(
+          process.cwd(),
+          '.aws-credentials-encrypted.json'
+        )
+        unlinkSync(credentialsPath)
+      } catch {
+        // File doesn't exist, ignore
       }
     } catch (error) {
       console.error('Error clearing credentials:', error)

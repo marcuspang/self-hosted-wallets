@@ -16,13 +16,13 @@ importers:
         version: 3.863.0
       '@hono/node-server':
         specifier: ^1.18.1
-        version: 1.18.1(hono@4.9.0)
+        version: 1.18.1(hono@4.9.6)
       dotenv:
         specifier: ^17.2.1
         version: 17.2.1
       hono:
         specifier: ^4
-        version: 4.9.0
+        version: 4.9.6
       ioredis:
         specifier: ^5.7.0
         version: 5.7.0
@@ -34,7 +34,7 @@ importers:
         version: 8.16.3
       porto:
         specifier: latest
-        version: 0.0.63(@wagmi/core@2.18.1(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3)))(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3))(zod@3.22.3)
+        version: 0.0.83(@wagmi/core@2.18.1(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3)))(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3))(zod@3.22.3)
       viem:
         specifier: ^2
         version: 2.33.3(typescript@5.8.3)(zod@3.22.3)
@@ -706,8 +706,8 @@ packages:
   get-tsconfig@4.10.1:
     resolution: {integrity: sha512-auHyJ4AgMz7vgS8Hp3N6HXSmlMdUyhSUrfBF16w153rxtLIEOE+HGqaBppczZvnHLqQJfiHotCYpNhl0lUROFQ==}
 
-  hono@4.9.0:
-    resolution: {integrity: sha512-JAUc4Sqi3lhby2imRL/67LMcJFKiCu7ZKghM7iwvltVZzxEC5bVJCsAa4NTnSfmWGb+N2eOVtFE586R+K3fejA==}
+  hono@4.9.6:
+    resolution: {integrity: sha512-doVjXhSFvYZ7y0dNokjwwSahcrAfdz+/BCLvAMa/vHLzjj8+CFyV5xteThGUsKdkaasgN+gF2mUxao+SGLpUeA==}
     engines: {node: '>=16.9.0'}
 
   idb-keyval@6.2.2:
@@ -822,15 +822,15 @@ packages:
   pgpass@1.0.5:
     resolution: {integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==}
 
-  porto@0.0.63:
-    resolution: {integrity: sha512-O/RJrawCrsrDirtFY1+DPTc4/h/g+syBZS+wT9ToWEUvZ9K2VUT5F4WRWhBmd3OEhV8pt+lOPUA+1SnjCq/oHA==}
+  porto@0.0.83:
+    resolution: {integrity: sha512-KLcAw55B2o4tJsU/3dxKZqxnocRotik9UKQkVVUPLkc0V/NIFl9PEQnoeBXOYZfRiTryxbKY50VhCJpcqTNBPg==}
     hasBin: true
     peerDependencies:
       '@tanstack/react-query': '>=5.59.0'
       '@wagmi/core': '>=2.16.3'
       react: '>=18'
       typescript: '>=5.4.0'
-      viem: '>=2.28.0'
+      viem: '>=2.33.0'
       wagmi: '>=2.0.0'
     peerDependenciesMeta:
       '@tanstack/react-query':
@@ -1529,9 +1529,9 @@ snapshots:
   '@esbuild/win32-x64@0.25.4':
     optional: true
 
-  '@hono/node-server@1.18.1(hono@4.9.0)':
+  '@hono/node-server@1.18.1(hono@4.9.6)':
     dependencies:
-      hono: 4.9.0
+      hono: 4.9.6
 
   '@ioredis/commands@1.3.0': {}
 
@@ -1963,7 +1963,7 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  hono@4.9.0: {}
+  hono@4.9.6: {}
 
   idb-keyval@6.2.2: {}
 
@@ -2095,7 +2095,7 @@ snapshots:
     dependencies:
       split2: 4.2.0
 
-  porto@0.0.63(@wagmi/core@2.18.1(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3)))(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3))(zod@3.22.3):
+  porto@0.0.83(@wagmi/core@2.18.1(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3)))(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3))(zod@3.22.3):
     dependencies:
       '@wagmi/core': 2.18.1(typescript@5.8.3)(viem@2.33.3(typescript@5.8.3)(zod@3.22.3))
       effect: 3.17.6
